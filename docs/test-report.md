@@ -5,65 +5,50 @@
 
 ## 结果摘要
 
-- Python 编译检查通过：`python -m compileall src tests`。
-- Python 单元测试通过：`17 passed, 1 warning`，覆盖后处理、快捷键、用户快捷键配置写入、版本一致性、输入注入 dry-run、录音未检测到语音超时、桌面通知超时容错。
-- deb 构建通过：生成 `dist/local-speak-input_0.1.1_amd64.deb`，约 212 MB。
-- deb 包声明依赖可由 apt 解析；当前机器模拟安装只升级 `local-speak-input`。
-- deb 包内包含 Python 运行环境、默认 `faster-whisper-base` 模型、GUI 内联 logo、系统 SVG 图标、桌面入口、右上角 AppIndicator 控制入口、AppStream 元数据、systemd 用户服务、系统默认配置。
-- staged 包内 GUI HTTP 首页、`/logo.svg`、`/api/config`、`/api/process-text`、快捷键设置接口通过。
-- 右上角图标运行时检查通过：`local-speak doctor` 显示 `右上角图标: OK`；真实桌面会话中托盘进程可启动并拉起 daemon。
-- X11 daemon 快捷键触发通过：`xdotool key ctrl+alt+space` 可触发录音流程。
-- 原问题已回归验证：未检测到语音时不再卡在“开始录音”，8 秒后输出明确提示。
-- `notify-send` 超时时不再导致 daemon 崩溃。
-- 控制台图片修复已验证：主页面使用内联 SVG logo，`/logo.svg` GET/HEAD 返回 `Content-Type: image/svg+xml`。
-- X11 中文注入既往真实测试通过：`zenity` 临时输入框收到 `语音输入测试。`。
+- Python 编译检查通过：`python3 -m compileall src tests`。
+- Python 单元测试通过：`37 passed, 1 warning`。
+- 默认高准确率 deb 构建通过：`dist/voxflow_0.2.0_amd64.deb`，约 5.9 GB。
+- deb 包内包含 Qwen3-ASR 1.7B 两个模型分片、内置 `faster-whisper-tiny` fallback、IBus component、桌面入口、右上角图标入口、systemd 用户服务和旧 `local-speak-*` 兼容入口。
+- apt 模拟安装通过：会移除旧 `local-speak-input 0.1.1` 并安装 `voxflow 0.2.0`。
+- staged rootfs 运行验证通过：`voxflow doctor`、`voxflow models`、`voxflow ibus-engine --dry-run`。
+- staged GUI 验证通过：首页、`/logo.svg` HEAD、`/api/models`、`/api/semantic-intent`、`/api/process-text`。
+- 语义撤销开关和后端状态已覆盖：当前可用 `rules`，未训练/未安装的 MiniLM/SetFit 后端会被 GUI API 拒绝。
+- 包内路径污染扫描通过：VoxFlow 运行入口、配置、模型目录和 package data 未包含开发目录、`downloads/models` 或 Hugging Face `.cache` 路径。
 
 ## 执行项目
 
-### 单元测试
+### 自动化测试
 
 ```bash
-.venv/bin/python -m compileall src tests
-.venv/bin/pytest -q
+python3 -m compileall src tests
+.venv/bin/python -m pytest -q
 ```
 
 结果：
 
 ```text
-17 passed, 1 warning in 0.04s
+37 passed, 1 warning in 0.09s
 ```
 
-覆盖：
+覆盖重点：
 
-- 口语修正
-- 自动标点
-- 输入注入 dry-run
-- X11 快捷键解析
-- 用户级快捷键配置写入和非法快捷键拒绝
-- 录音未检测到语音时超时退出
-- `notify-send` 超时容错
-- `pyproject.toml` 与 CLI 包版本一致
+- 默认简体中文输出、OpenCC 简繁转换和繁体设置。
+- `toggle` / `hold` 快捷键状态机和用户快捷键配置。
+- 语义撤销开关、“不是不对”等误触发边界。
+- VoxFlow 注入账本只删除自己提交过的文本。
+- 模型档位、语义意图后端注册和许可证元数据。
+- 录音 fallback、通知容错、输入注入 dry-run、版本一致性。
 
-### 环境诊断
+### 模型缓存
 
-```bash
-.venv/bin/local-speak doctor
-```
-
-结果摘要：
+Qwen3-ASR 1.7B 本机缓存分片：
 
 ```text
-Python 模块 faster_whisper: OK
-Python 模块 qwen_asr: 未安装
-Python 模块 sounddevice: OK
-X11 全局快捷键: OK
-右上角图标: OK
-命令 notify-send: /usr/bin/notify-send
-命令 xdotool: /usr/bin/xdotool
-命令 xclip: /usr/bin/xclip
-命令 pw-record: /usr/bin/pw-record
-命令 ffmpeg: /usr/bin/ffmpeg
+4220320824 downloads/models/Qwen3-ASR-1.7B/model-00001-of-00002.safetensors
+478200688 downloads/models/Qwen3-ASR-1.7B/model-00002-of-00002.safetensors
 ```
+
+`huggingface-cli download Qwen/Qwen3-ASR-1.7B model-00001-of-00002.safetensors --local-dir downloads/models/Qwen3-ASR-1.7B --max-workers 1` 返回本地文件路径，未重新下载。
 
 ### 打包
 
@@ -74,136 +59,118 @@ scripts/build_deb.sh
 结果：
 
 ```text
-Built /home/terry/workplace/local_speak_input/dist/local-speak-input_0.1.1_amd64.deb
+Built dist/voxflow_0.2.0_amd64.deb
 ```
 
-### 包元数据
-
-```bash
-dpkg-deb --info dist/local-speak-input_0.1.1_amd64.deb
-desktop-file-validate build/deb/rootfs/usr/share/applications/local-speak-input.desktop
-```
-
-结果：通过。`Depends` 包含：
+包元数据摘要：
 
 ```text
-python3 (>= 3.11), python3-gi, gir1.2-gtk-3.0, gir1.2-appindicator3-0.1, gnome-shell-extension-appindicator, libportaudio2, libx11-6, libnotify-bin, ffmpeg, pipewire-bin, wireplumber, xdotool, xclip, xdg-utils, ca-certificates
+Package: voxflow
+Version: 0.2.0
+Architecture: amd64
+Maintainer: Jiaming Wang <w_jming@outlook.com>
+Provides: local-speak-input
+Conflicts: local-speak-input
+Replaces: local-speak-input
 ```
 
-`appstreamcli validate build/deb/rootfs/usr/share/metainfo/local-speak-input.metainfo.xml` 只剩一个非运行时警告：当前仓库没有公开 homepage URL，因此没有伪造链接写入元数据。
+关键内容检查确认包含：
+
+- `/opt/voxflow/models/Qwen3-ASR-1.7B/model-00001-of-00002.safetensors`
+- `/opt/voxflow/models/Qwen3-ASR-1.7B/model-00002-of-00002.safetensors`
+- `/opt/voxflow/venv/lib/python3.12/site-packages/voxflow/bundled/faster-whisper-tiny/model.bin`
+- `/usr/share/ibus/component/voxflow.xml`
+- `/usr/bin/voxflow-ibus-engine`
+- `/usr/share/applications/voxflow.desktop`
+- `/usr/share/icons/hicolor/scalable/apps/voxflow.svg`
+- `/usr/bin/local-speak-daemon`
 
 ### apt 模拟安装
 
 ```bash
-apt-get -s install ./dist/local-speak-input_0.1.1_amd64.deb
+apt-get -s install ./dist/voxflow_0.2.0_amd64.deb
 ```
 
-当前机器结果：
+结果摘要：
 
 ```text
-The following packages will be upgraded:
+The following packages will be REMOVED:
   local-speak-input
-1 upgraded, 0 newly installed, 0 to remove and 9 not upgraded.
+The following NEW packages will be installed:
+  voxflow
+Remv local-speak-input [0.1.1]
+Inst voxflow (0.2.0 local-deb [amd64])
+Conf voxflow (0.2.0 local-deb [amd64])
 ```
 
-### 包内容检查
+### staged rootfs
 
 ```bash
-dpkg-deb --contents dist/local-speak-input_0.1.1_amd64.deb | rg 'local-speak-input.desktop|local-speak-input.metainfo.xml|local-speak-input.svg|logo.svg|local-speak-daemon|local-speak-tray|model.bin'
+build/deb/rootfs/opt/voxflow/venv/bin/python -m voxflow doctor
+build/deb/rootfs/opt/voxflow/venv/bin/python -m voxflow models
+build/deb/rootfs/opt/voxflow/venv/bin/python -m voxflow ibus-engine --dry-run --config build/deb/rootfs/etc/voxflow/config.toml
 ```
 
-结果确认包含：
+结果摘要：
 
-- `/usr/share/applications/local-speak-input.desktop`
-- `/usr/share/icons/hicolor/scalable/apps/local-speak-input.svg`
-- `/usr/share/metainfo/local-speak-input.metainfo.xml`
-- `/usr/bin/local-speak-daemon`
-- `/usr/bin/local-speak-tray`
-- `/opt/local-speak-input/venv/lib/python3.12/site-packages/local_speak_input/web/logo.svg`
-- `/opt/local-speak-input/models/faster-whisper-base/model.bin`
-
-### 路径污染检查
-
-```bash
-rg -a -n "/home/terry|workplace/local_speak_input|build/deb" \
-  build/deb/rootfs/opt/local-speak-input/venv \
-  build/deb/rootfs/usr/bin \
-  build/deb/rootfs/etc/local-speak-input \
-  build/deb/rootfs/usr/share/applications \
-  build/deb/rootfs/usr/share/metainfo
+```text
+Python 模块 opencc: OK
+Python 模块 faster_whisper: OK
+Python 模块 qwen_asr: OK
+Python 模块 sounddevice: OK
+X11 全局快捷键: OK
+IBus 输入法: OK
+右上角图标: OK
 ```
 
-结果：无匹配，包内运行入口没有引用开发目录。
+IBus dry-run：
+
+```text
+VoxFlow IBus dry-run engine is available.
+COMMIT 这是语音输入测试。
+```
 
 ### GUI 接口
 
 ```bash
-build/deb/rootfs/opt/local-speak-input/venv/bin/python -m local_speak_input \
-  gui --host 127.0.0.1 --port 8773 --dry-run \
-  --config build/deb/rootfs/etc/local-speak-input/config.toml
-curl -fsS http://127.0.0.1:8773/
-curl -fsSI http://127.0.0.1:8773/logo.svg
-curl -fsS http://127.0.0.1:8773/api/config
-curl -fsS -X POST http://127.0.0.1:8773/api/process-text \
-  -H 'Content-Type: application/json' \
-  -d '{"text":"今天下午三点哦不四点","inject":false}'
-curl -fsS -X POST http://127.0.0.1:8773/api/settings/hotkey \
-  -H 'Content-Type: application/json' \
-  -d '{"hotkey":"ctrl+shift+space","restart":false}'
+build/deb/rootfs/opt/voxflow/venv/bin/python -m voxflow gui --dry-run --host 127.0.0.1 --port 8877 --config build/deb/rootfs/etc/voxflow/config.toml
+curl -fsSI http://127.0.0.1:8877/logo.svg
+curl -fsS http://127.0.0.1:8877/api/models
+curl -fsS http://127.0.0.1:8877/api/semantic-intent
+curl -fsS -X POST http://127.0.0.1:8877/api/process-text -H 'Content-Type: application/json' -d '{"text":"今天下午三点哦不四点","inject":false}'
 ```
 
 关键结果：
 
-```json
-{"raw_text":"今天下午三点哦不四点","processed_text":"今天下午四点。"}
+```text
+Content-Type: image/svg+xml
 ```
 
-首页包含“声流输入法”“VoxFlow Input”“Ctrl+Alt+Space”“local-speak-daemon”，logo SVG 可正常返回。
-
-快捷键设置结果：
-
 ```json
-{"hotkey":"ctrl+shift+space","daemon_restarted":false}
+{"raw_text":"今天下午三点哦不四点","processed_text":"今天下午四点。","actions":[{"insert":"今天下午四点。","backspace":0,"reason":""}]}
 ```
 
-非法快捷键会返回 400：
+未启用语义后端拒绝结果：
 
 ```json
-{"error":"快捷键必须包含且只包含一个普通按键：ctrl+a+b"}
+{"error":"该语义意图后端尚未在本机启用，需要先训练或安装对应模型"}
 ```
 
-### 右上角图标
+### 包内路径检查
 
 ```bash
-env PYTHONPATH=src LOCAL_SPEAK_PYTHON=.venv/bin/python python3 -m local_speak_input.tray
+rg -a -n "/home/<user>|<repo-absolute-path>|downloads/models|\\.cache/huggingface" \
+  build/deb/rootfs/usr/bin \
+  build/deb/rootfs/etc/voxflow \
+  build/deb/rootfs/usr/share/applications \
+  build/deb/rootfs/usr/share/ibus \
+  build/deb/rootfs/opt/voxflow/venv/lib/python3.12/site-packages/voxflow \
+  build/deb/rootfs/opt/voxflow/venv/lib/python3.12/site-packages/voxflow-0.2.0.dist-info \
+  build/deb/rootfs/opt/voxflow/models
 ```
 
-结果：AppIndicator 进程在真实 X11/GNOME 会话中保持运行，并自动启动后台 daemon。Ctrl+C 可干净退出托盘测试进程；测试后通过 `service_control.stop_daemon()` 停止自动拉起的 daemon。
-
-### daemon 快捷键与无语音超时
-
-```bash
-.venv/bin/local-speak daemon \
-  --model build/deb/rootfs/opt/local-speak-input/models/faster-whisper-base \
-  --device cpu --compute-type int8 --dry-run
-xdotool key ctrl+alt+space
-```
-
-结果：
-
-```text
-[local-speak-daemon] 后台语音输入已启动，快捷键：ctrl+alt+space
-[local-speak-daemon] 把光标放在目标输入框，按快捷键开始一次语音输入。
-[local-speak-daemon] 开始录音...
-[local-speak-daemon] 8 秒内没有检测到语音，请检查默认麦克风或降低 energy_threshold。
-```
-
-Ctrl+C 停止结果：
-
-```text
-已停止后台语音输入。
-```
+结果：无匹配。
 
 ## 未执行项
 
-没有在当前系统执行真实 `sudo apt install ./dist/...deb`，因为 sudo 需要用户密码。已用 apt 模拟安装、staged rootfs 运行验证、真实 X11 快捷键触发和既往真实 X11 中文输入框注入覆盖主要链路。
+没有执行真实 `sudo apt install ./dist/voxflow_0.2.0_amd64.deb`，避免在开发过程中直接替换当前桌面会话已安装包。当前验收覆盖了 apt 依赖解析、staged rootfs 运行、GUI 接口、IBus dry-run、模型文件和包内容。

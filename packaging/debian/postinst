@@ -15,10 +15,11 @@ fi
 
 cat <<'EOF'
 声流输入法已安装。
-- 图形界面：从应用菜单打开“声流输入法”，或运行 local-speak-gui
+- 图形界面：从应用菜单打开“声流输入法”，或运行 voxflow-gui
 - 右上角图标：打开“声流输入法”后会自动出现，可控制后台输入
-- 后台输入：把光标放进输入框并按 Ctrl+Alt+Space
-- 环境检查：运行 local-speak doctor
+- 后台输入：把光标放进输入框，默认按 Ctrl+Space 开始录音，再按一次停止输入
+- 系统输入法：在系统输入源中添加 “VoxFlow Input” 可使用 IBus composition 模式
+- 环境检查：运行 voxflow doctor
 EOF
 
 exit 0

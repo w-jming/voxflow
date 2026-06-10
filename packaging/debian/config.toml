@@ -1,13 +1,16 @@
 [asr]
 backend = "faster-whisper"
-model = "/opt/local-speak-input/models/faster-whisper-base"
-device = "cpu"
-compute_type = "int8"
+model = "bundled:faster-whisper-tiny"
+device = "auto"
+compute_type = "auto"
 language = "auto"
 
 [text]
 remove_fillers = true
 auto_punctuation = true
+script = "simplified"
+semantic_correction_enabled = true
+semantic_intent_backend = "rules"
 
 [input]
 injector = "auto"
@@ -24,5 +27,8 @@ min_voice_ms = 240
 energy_threshold = 0.012
 
 [daemon]
-hotkey = "ctrl+alt+space"
+hotkey = "ctrl+space"
+hotkey_mode = "toggle"
+hold_min_s = 0.25
+toggle_debounce_s = 0.8
 restore_focus = true

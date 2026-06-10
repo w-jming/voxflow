@@ -1,4 +1,4 @@
-from local_speak_input.postprocess.punctuation import AutoPunctuator
+from voxflow.postprocess.punctuation import AutoPunctuator
 
 
 def test_chinese_question_mark():

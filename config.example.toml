@@ -1,7 +1,7 @@
 [asr]
-# 可选：faster-whisper、qwen、openai-compatible
+# 默认使用源码内置轻量模型；高准确率模型可运行 `voxflow models` 下载切换。
 backend = "faster-whisper"
-model = "large-v3"
+model = "bundled:faster-whisper-tiny"
 device = "auto"
 compute_type = "auto"
 language = "auto"
@@ -15,6 +15,9 @@ timeout = 120
 [text]
 remove_fillers = true
 auto_punctuation = true
+script = "simplified"
+semantic_correction_enabled = true
+semantic_intent_backend = "rules"
 
 [input]
 # 可选：auto、wtype、wayland-clipboard、xclip、xsel、xdotool、ydotool
@@ -32,5 +35,8 @@ min_voice_ms = 240
 energy_threshold = 0.012
 
 [daemon]
-hotkey = "ctrl+alt+space"
+hotkey = "ctrl+space"
+hotkey_mode = "toggle"
+hold_min_s = 0.25
+toggle_debounce_s = 0.8
 restore_focus = true

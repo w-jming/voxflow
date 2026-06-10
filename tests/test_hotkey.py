@@ -1,4 +1,4 @@
-from local_speak_input.hotkey import CONTROL_MASK, MOD1_MASK, SHIFT_MASK, parse_hotkey
+from voxflow.hotkey import CONTROL_MASK, MOD1_MASK, SHIFT_MASK, parse_hotkey
 
 
 def test_parse_hotkey_ctrl_alt_space():
@@ -6,6 +6,13 @@ def test_parse_hotkey_ctrl_alt_space():
 
     assert spec.key == "space"
     assert spec.modifiers == CONTROL_MASK | MOD1_MASK
+
+
+def test_parse_default_hotkey_ctrl_space():
+    spec = parse_hotkey("ctrl+space")
+
+    assert spec.key == "space"
+    assert spec.modifiers == CONTROL_MASK
 
 
 def test_parse_hotkey_angle_bracket_format():

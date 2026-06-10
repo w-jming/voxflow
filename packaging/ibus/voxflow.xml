@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <name>org.freedesktop.IBus.VoxFlow</name>
+  <description>VoxFlow voice input method</description>
+  <exec>/usr/bin/voxflow-ibus-engine</exec>
+  <version>0.2.0</version>
+  <author>Jiaming Wang</author>
+  <license>MIT</license>
+  <homepage>https://github.com/w-jming/voxflow</homepage>
+  <textdomain>voxflow</textdomain>
+  <engines>
+    <engine>
+      <name>voxflow</name>
+      <language>zh</language>
+      <license>MIT</license>
+      <author>Jiaming Wang</author>
+      <icon>/usr/share/icons/hicolor/scalable/apps/voxflow.svg</icon>
+      <layout>us</layout>
+      <longname>VoxFlow Input</longname>
+      <description>Voice input method with live composition</description>
+      <rank>80</rank>
+    </engine>
+  </engines>
+</component>

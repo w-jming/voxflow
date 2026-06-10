@@ -1,7 +1,7 @@
 import tomllib
 from pathlib import Path
 
-from local_speak_input import __version__
+from voxflow import __version__
 
 
 def test_package_version_matches_pyproject():

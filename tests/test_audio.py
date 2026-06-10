@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from local_speak_input.audio import EnergyVadRecorder, NoSpeechDetected
-from local_speak_input.config import AudioConfig
+from voxflow.audio import EnergyVadRecorder, NoSpeechDetected
+from voxflow.config import AudioConfig
 
 
 class SilentRawInputStream:
