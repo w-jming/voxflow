@@ -1,0 +1,28 @@
+[asr]
+backend = "faster-whisper"
+model = "/opt/local-speak-input/models/faster-whisper-base"
+device = "cpu"
+compute_type = "int8"
+language = "auto"
+
+[text]
+remove_fillers = true
+auto_punctuation = true
+
+[input]
+injector = "auto"
+dry_run = false
+backspace_delay = 0.0
+
+[audio]
+sample_rate = 16000
+frame_ms = 30
+silence_ms = 700
+max_utterance_s = 12
+activation_timeout_s = 8
+min_voice_ms = 240
+energy_threshold = 0.012
+
+[daemon]
+hotkey = "ctrl+alt+space"
+restore_focus = true

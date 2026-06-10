@@ -1,0 +1,36 @@
+[asr]
+# 可选：faster-whisper、qwen、openai-compatible
+backend = "faster-whisper"
+model = "large-v3"
+device = "auto"
+compute_type = "auto"
+language = "auto"
+
+# OpenAI 兼容服务示例：FunASR/Qwen/vLLM/OpenAI 风格 /v1/audio/transcriptions
+api_base = "http://127.0.0.1:8000/v1"
+api_model = "whisper-1"
+api_key_env = "OPENAI_API_KEY"
+timeout = 120
+
+[text]
+remove_fillers = true
+auto_punctuation = true
+
+[input]
+# 可选：auto、wtype、wayland-clipboard、xclip、xsel、xdotool、ydotool
+injector = "auto"
+dry_run = false
+backspace_delay = 0.0
+
+[audio]
+sample_rate = 16000
+frame_ms = 30
+silence_ms = 700
+max_utterance_s = 15
+activation_timeout_s = 8
+min_voice_ms = 240
+energy_threshold = 0.012
+
+[daemon]
+hotkey = "ctrl+alt+space"
+restore_focus = true

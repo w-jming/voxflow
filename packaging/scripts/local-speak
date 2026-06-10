@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export PYTHONNOUSERSITE=1
+exec /opt/local-speak-input/venv/bin/python -m local_speak_input "$@"

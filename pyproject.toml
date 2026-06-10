@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-speak-input"
+version = "0.1.1"
+description = "轻量级 Linux 中文/英文语音输入法"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "local-speak-input contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.1.0"]
+qwen = ["qwen-asr"]
+mic = ["sounddevice>=0.5.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+local-speak = "local_speak_input.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"local_speak_input" = ["web/*"]
