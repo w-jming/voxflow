@@ -1,150 +1,112 @@
 # 声流输入法 / VoxFlow Input
 
-用户友好的 Linux 中文/英文语音输入法。项目提供后台快捷键、命令行和本地可视化控制台，支持口语助词清理、“哦不/不是/撤回”等自然修正、自动标点、可插拔 ASR 后端和 Linux 系统文本注入。
+VoxFlow 是 Linux 桌面中文/英文语音输入法。它提供桌面启动器、右上角控制图标、本地 Web 控制台、全局快捷键、自动标点、口语修正、简体/繁体输出设置和可切换 ASR 模型。
 
-## 当前能力
+## 安装
 
-- 中文/英文 ASR 后端：`faster-whisper`、`qwen-asr`、OpenAI 兼容 `/v1/audio/transcriptions` 服务。
-- 文本后处理：删除高置信口语助词，自动补句末标点，支持“哦不”“不对”“不是”“撤回刚才”等修正命令。
-- Linux 输入：自动选择 `wtype`、`xdotool` 或 `ydotool`，也支持 dry-run 预览。
-- 后台快捷键：X11 下支持 `Ctrl+Alt+Space` 触发一次录音识别，并把文本输入到当前光标所在窗口。
-- 可视化控制台：浏览器录音、实时波形、识别结果、处理结果、退格/插入动作列表、文本修正测试。
-- 轻量默认：核心包不强制安装大模型依赖，按实际后端安装 extras。
+Debian/Ubuntu 用户安装本机打包产物：
 
-## 快速开始
+```bash
+sudo apt install ./dist/voxflow_0.2.0_amd64.deb
+```
 
-### Debian/Ubuntu 安装包
+安装后从应用菜单打开“声流输入法”，或运行：
 
-构建完整 deb 包：
+```bash
+voxflow-gui
+```
+
+这个入口会启动后台输入服务、右上角图标和本地控制台。
+
+## 使用
+
+默认快捷键是 `Ctrl+Space`，默认模式是“按一次开始录音，再按一次停止并输入”。把光标放到终端、浏览器搜索框、编辑器或聊天窗口后按快捷键即可输入。
+
+控制台可以设置：
+
+- 快捷键。
+- 录音模式：按键切换，或按住录音。
+- 输出字形：简体中文、繁体中文、模型原文。
+- 语义撤销识别：可开启或关闭，并显示当前可用/计划中的语义意图后端。
+- 语音模型：内置轻量模型、Qwen3-ASR 0.6B、Qwen3-ASR 1.7B。
+
+右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录，以及退出 VoxFlow。退出 VoxFlow 会停止后台输入服务。
+
+## 系统输入法模式
+
+安装 deb 后会注册 IBus 引擎 `VoxFlow Input`。在 GNOME/KDE 的输入源设置里添加 VoxFlow 后，VoxFlow 可以作为系统输入法工作：
+
+- 临时识别文本显示为 IBus preedit composition。
+- 稳定文本通过 IBus commit 写入当前光标处。
+- “不对 / 错了 / 不是”等修正会根据 VoxFlow 自己的提交账本撤销相关片段，不删除用户手动输入内容。
+- 选中 VoxFlow 输入法后可持续听写；切走输入法或焦点离开时停止。
+
+旧的快捷键 daemon 仍保留，适合不想修改系统输入源时使用；系统输入法模式更适合长时间连续输入。
+
+## 语义撤销
+
+VoxFlow 默认启用规则状态机 + 注入账本的语义撤销。设置里可以关闭该功能，关闭后“不是”“不对”“撤回”等都会按普通文本处理。
+
+语义意图后端采用可插拔设计：当前可用默认档是规则引擎；MiniLM/SetFit、Qwen3-Embedding 0.6B 分类头和低置信 LLM 仲裁在界面中作为计划后端展示，训练/安装前不可选择。任何后端都只能提出撤销建议，真正删除必须经过 VoxFlow 注入账本验证。
+
+## 模型
+
+源码仓库内置 `Systran/faster-whisper-tiny` 作为轻量 fallback，许可证为 MIT，支持中文和英文在内的多语言输入。更高准确率模型可在控制台点击“下载”，也可以用命令行下载并切换：
+
+```bash
+voxflow models
+voxflow models --download qwen3-asr-0.6b
+voxflow models --select qwen3-asr-0.6b
+voxflow models --download qwen3-asr-1.7b
+voxflow models --select qwen3-asr-1.7b
+```
+
+Qwen3-ASR 0.6B/1.7B 使用官方 Hugging Face 模型仓库，许可证为 Apache-2.0。本机高准确率 deb 默认打包 Qwen3-ASR 1.7B，不把大模型权重提交到源码仓库。
+
+## 诊断
+
+检查依赖和运行环境：
+
+```bash
+voxflow doctor
+```
+
+查看后台日志：
+
+```bash
+tail -n 80 ~/.local/state/voxflow/daemon.log
+```
+
+命令行一次性听写：
+
+```bash
+voxflow dictate --once
+```
+
+如果使用蓝牙耳机但没有输入，请在系统声音设置里确认蓝牙设备切到 headset / hands-free profile，而不是仅输出的 A2DP profile。
+
+## 开发与测试
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[mic,dev]'
+pytest -q
+python3 -m compileall src tests
+```
+
+构建 deb：
 
 ```bash
 scripts/build_deb.sh
 ```
 
-安装：
+默认会构建包含 Qwen3-ASR 1.7B 的本机高准确率包。要构建轻量包：
 
 ```bash
-sudo apt install ./dist/local-speak-input_0.1.1_amd64.deb
+VOXFLOW_BUNDLE_PROFILE=bundled-faster-whisper-tiny scripts/build_deb.sh
 ```
 
-deb 包内置 Python 依赖和默认 `faster-whisper-base` 模型；系统级依赖由 apt 自动安装。安装后启动：
+## 许可证
 
-```bash
-local-speak-gui
-```
-
-也可以在应用菜单中打开“声流输入法”。这个入口会自动启动后台快捷键服务、右上角控制图标，并打开控制台。控制台会显示录音按钮、实时波形、识别结果、口语修正结果和快捷键设置，适合第一次确认麦克风、模型和文本处理是否正常。
-
-后台快捷键语音输入：
-
-```bash
-local-speak-daemon
-```
-
-默认快捷键是 `Ctrl+Alt+Space`。把光标放到终端、浏览器搜索框、编辑器等目标输入框，按快捷键开始一次语音输入。录音、识别、完成和异常状态会通过桌面通知提示；如果 8 秒内没有检测到语音，会退出本次录音并提示检查默认麦克风或降低能量阈值。快捷键可以在控制台“快捷键”设置中修改，保存后会写入用户配置并重启正在运行的后台输入服务。
-
-如果从应用菜单打开后快捷键没有反应，先检查后台日志：
-
-```bash
-tail -n 80 ~/.local/state/local-speak-input/daemon.log
-```
-
-右上角图标提供“打开控制台”“启动后台输入”“停止后台输入”“重启后台输入”“打开日志目录”和“退出图标”。
-
-诊断和一次性听写：
-
-```bash
-local-speak doctor
-local-speak dictate --once
-```
-后台服务也可以用 systemd 用户服务常驻：
-
-```bash
-systemctl --user enable --now local-speak-input.service
-```
-
-### 开发环境
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[whisper,mic,dev]'
-```
-
-检查环境：
-
-```bash
-local-speak doctor
-```
-
-启动可视化控制台：
-
-```bash
-local-speak gui --backend faster-whisper --model large-v3 --dry-run
-```
-
-打开终端输出的本地地址，默认是 `http://127.0.0.1:8765`。
-
-识别文件：
-
-```bash
-local-speak transcribe sample.wav --backend faster-whisper --model large-v3
-```
-
-连续听写并输入到当前焦点窗口：
-
-```bash
-local-speak dictate --backend faster-whisper --model large-v3
-```
-
-## 配置
-
-复制配置模板：
-
-```bash
-mkdir -p ~/.config/local-speak-input
-cp config.example.toml ~/.config/local-speak-input/config.toml
-```
-
-OpenAI 兼容 ASR 服务示例：
-
-```toml
-[asr]
-backend = "openai-compatible"
-api_base = "http://127.0.0.1:8000/v1"
-api_model = "Qwen/Qwen3-ASR-1.7B"
-api_key_env = "OPENAI_API_KEY"
-```
-
-## Linux 输入依赖
-
-Wayland 优先安装 `wtype`，X11 优先安装 `xdotool`。如果两者不可用，可以配置 `ydotool`，但通常需要守护进程和输入设备权限。
-
-## 模型选择
-
-第一版推荐：
-
-- 准确率和中英混输优先：`Qwen/Qwen3-ASR-1.7B`，本地 GPU 或 vLLM/OpenAI 兼容服务。
-- 轻量和低延迟优先：`Qwen/Qwen3-ASR-0.6B` 或 `faster-whisper` 的 `large-v3-turbo`。
-- 中文标点优先且继续使用 Whisper：`k1nto/Belle-whisper-large-v3-zh-punct-ct2`。
-- 工业化本地服务：FunASR/SenseVoice，适合 VAD、标点、ITN、长音频服务化。
-- 云 API 候选：Qwen3-ASR-Flash/DashScope、火山引擎豆包 ASR、NVIDIA NIM Parakeet。正式采用前需要用你的口音、麦克风和常用术语集实测。
-
-更完整调研见 [docs/model-research.md](docs/model-research.md)。
-
-## 测试
-
-```bash
-pip install -e '.[dev]'
-pytest -q
-```
-
-当前环境没有预装 `pytest` 时，可以先运行：
-
-```bash
-python3 -m compileall src tests
-```
-
-## 开发流程
-
-项目已按功能分支开发，当前分支应保持在 `feature/initial-implementation`。不要直接在 `main` 上开发；完成本地验证后再由你决定提交到 GitHub。
+VoxFlow 代码使用 MIT 许可证。内置 `Systran/faster-whisper-tiny` 模型使用 MIT 许可证。Qwen3-ASR 模型使用 Apache-2.0 许可证，下载来源为 Qwen 官方 Hugging Face 仓库。

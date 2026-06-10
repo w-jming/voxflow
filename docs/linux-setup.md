@@ -39,7 +39,7 @@ sudo apt install libportaudio2
 如果暂时不能安装这个系统库，仍可使用：
 
 ```bash
-local-speak dictate --once
+voxflow dictate --once
 ```
 
 但每次会按 `audio.max_utterance_s` 录满一段，默认 15 秒。
@@ -80,19 +80,19 @@ wpctl set-profile 73 261
 启动控制台。安装 deb 后也可以从应用菜单打开“声流输入法”；应用菜单入口会自动拉起后台快捷键服务和右上角控制图标：
 
 ```bash
-local-speak-gui
+voxflow-gui
 ```
 
 只录一段并输入：
 
 ```bash
-local-speak dictate --once
+voxflow dictate --once
 ```
 
 只测试口语修正，不加载 ASR：
 
 ```bash
-local-speak gui --dry-run
+voxflow gui --dry-run
 ```
 
 打开页面后使用“口语修正测试”文本框。
@@ -102,34 +102,34 @@ local-speak gui --dry-run
 X11 桌面下可以启动后台服务：
 
 ```bash
-local-speak-daemon
+voxflow-daemon
 ```
 
-如果是从应用菜单或 `local-speak-gui` 打开的，后台服务会自动启动，不需要再手动执行上面的命令。日志位置：
+如果是从应用菜单或 `voxflow-gui` 打开的，后台服务会自动启动，不需要再手动执行上面的命令。日志位置：
 
 ```bash
-~/.local/state/local-speak-input/daemon.log
+~/.local/state/voxflow/daemon.log
 ```
 
 默认快捷键：
 
 ```text
-Ctrl+Alt+Space
+Ctrl+Space
 ```
 
 使用流程：
 
 1. 把光标放到任意普通文本输入框。
-2. 按 `Ctrl+Alt+Space`。
-3. 说完一句话后等待识别和输入。
+2. 按 `Ctrl+Space` 开始录音。
+3. 再按一次 `Ctrl+Space` 停止录音并输入。
 
-后台服务会在录音前记录当前活动窗口，识别后恢复该窗口并输入文本，避免浏览器控制台抢焦点。通过 systemd 用户服务常驻：
+控制台可以把录音模式切换成“按住录音”，此时按住快捷键说话，松开后识别并输入。后台服务会在录音前记录当前活动窗口，识别后恢复该窗口并输入文本，避免浏览器控制台抢焦点。通过 systemd 用户服务常驻：
 
 ```bash
-systemctl --user enable --now local-speak-input.service
+systemctl --user enable --now voxflow.service
 ```
 
-后台服务会显示桌面通知：就绪、开始录音、正在识别、已输入、未检测到语音或失败。如果按快捷键后 8 秒内没有声音超过阈值，本次录音会自动结束并提示检查默认麦克风，不会一直卡在“开始录音”。安装 deb 时会自动安装 `libnotify-bin` 来提供通知命令。
+后台服务会显示桌面通知：就绪、开始录音、停止录音、正在识别、已输入、未检测到语音或失败。安装 deb 时会自动安装 `libnotify-bin` 来提供通知命令。
 
 快捷键可以在控制台的“快捷键”输入框中修改，例如：
 
@@ -139,9 +139,31 @@ ctrl+alt+return
 super+space
 ```
 
-保存后会写入 `~/.config/local-speak-input/config.toml`，并重启正在运行的后台输入服务。右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录或只退出图标本身。
+保存后会写入 `~/.config/voxflow/config.toml`，并重启正在运行的后台输入服务。右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录或退出 VoxFlow；退出 VoxFlow 会停止后台输入服务。
 
 Wayland 对全局快捷键和模拟输入限制较多；当前版本优先保证 X11 可用。
+
+## IBus 系统输入法模式
+
+安装 deb 后会注册 IBus component：
+
+```text
+/usr/share/ibus/component/voxflow.xml
+```
+
+在系统“输入源”中添加 `VoxFlow Input` 后，VoxFlow 会以 IBus 输入法方式工作。该模式使用 preedit composition 显示临时文本，稳定识别结果通过 IBus commit 写入当前光标处。语义撤销通过 VoxFlow 注入账本和 IBus `delete_surrounding_text` 完成，只撤销 VoxFlow 自己刚提交的相关片段，避免误删用户手动输入。
+
+开发环境可检查 IBus 引擎入口：
+
+```bash
+voxflow ibus-engine --dry-run
+```
+
+如果系统没有显示 `VoxFlow Input`，重启 IBus 或重新登录桌面会话：
+
+```bash
+ibus restart
+```
 
 ## 中文注入说明
 

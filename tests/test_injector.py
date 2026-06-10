@@ -1,5 +1,5 @@
-from local_speak_input.input.injector import DryRunInjector, apply_actions
-from local_speak_input.postprocess import EditAction
+from voxflow.input.injector import DryRunInjector, apply_actions
+from voxflow.postprocess import EditAction
 
 
 def test_dry_run_injector_records_actions():

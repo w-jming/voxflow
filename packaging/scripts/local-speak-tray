@@ -1,14 +1,3 @@
 #!/bin/sh
 set -eu
-
-SITE_PACKAGES="$(find /opt/local-speak-input/venv/lib -path '*/site-packages' -type d | head -n 1)"
-if [ -z "$SITE_PACKAGES" ]; then
-  echo "找不到 local-speak-input Python 包目录。" >&2
-  exit 1
-fi
-
-export PYTHONPATH="${SITE_PACKAGES}${PYTHONPATH:+:$PYTHONPATH}"
-export LOCAL_SPEAK_PYTHON="/opt/local-speak-input/venv/bin/python"
-export PYTHONNOUSERSITE=1
-
-exec python3 -m local_speak_input.tray "$@"
+exec voxflow-tray "$@"

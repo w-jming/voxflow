@@ -1,4 +1,4 @@
-from local_speak_input.postprocess import DictationSession
+from voxflow.postprocess import DictationSession
 
 
 def inserts(actions):
@@ -11,6 +11,22 @@ def test_removes_spoken_fillers_and_adds_punctuation():
     actions = session.process("嗯，我今天下午开会")
 
     assert inserts(actions) == "我今天下午开会。"
+
+
+def test_default_script_converts_traditional_to_simplified():
+    session = DictationSession()
+
+    actions = session.process("這是語音輸入測試")
+
+    assert inserts(actions) == "这是语音输入测试。"
+
+
+def test_traditional_script_is_configurable():
+    session = DictationSession(script="traditional")
+
+    actions = session.process("这是语音输入测试")
+
+    assert inserts(actions) == "這是語音輸入測試。"
 
 
 def test_local_repair_keeps_prefix_and_replaces_time():
@@ -28,6 +44,15 @@ def test_sentence_not_contains_no_false_correction():
     actions = session.process("这不是一个问题")
 
     assert inserts(actions) == "这不是一个问题。"
+    assert not any(action.backspace for action in actions)
+
+
+def test_semantic_correction_can_be_disabled():
+    session = DictationSession(semantic_correction_enabled=False)
+
+    actions = session.process("今天下午三点不对四点")
+
+    assert inserts(actions) == "今天下午三点不对四点。"
     assert not any(action.backspace for action in actions)
 
 

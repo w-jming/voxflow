@@ -1,10 +1,24 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: local-speak-input
+Upstream-Name: voxflow
 Source: local packaging build
 
 Files: *
-Copyright: 2026 local-speak-input contributors
+Copyright: 2026 voxflow contributors
 License: MIT
+
+Files: src/voxflow/bundled/faster-whisper-tiny/*
+Copyright: Systran and OpenAI Whisper contributors
+License: MIT
+Comment:
+ Source: https://huggingface.co/Systran/faster-whisper-tiny
+ The model card identifies the converted model license as MIT.
+
+Files: /opt/voxflow/models/Qwen3-ASR-*
+Copyright: Alibaba Cloud and Qwen contributors
+License: Apache-2.0
+Comment:
+ Source: https://huggingface.co/Qwen/Qwen3-ASR-1.7B
+ The Qwen3-ASR model card identifies the model license as Apache-2.0.
 
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,3 +38,7 @@ License: MIT
  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+
+License: Apache-2.0
+ On Debian systems, the complete Apache License 2.0 text is available at
+ /usr/share/common-licenses/Apache-2.0.
