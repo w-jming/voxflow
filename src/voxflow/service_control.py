@@ -8,6 +8,8 @@ import subprocess
 import sys
 import time
 
+from .paths import logs_dir, run_dir
+
 
 APP_ID = "voxflow"
 DEFAULT_HOST = "127.0.0.1"
@@ -22,8 +24,13 @@ class ProcessStatus:
 
 
 def state_dir() -> Path:
-    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
-    path = base / APP_ID
+    path = run_dir()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def log_dir() -> Path:
+    path = logs_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -33,7 +40,7 @@ def daemon_pid_file() -> Path:
 
 
 def daemon_log_file() -> Path:
-    return state_dir() / "daemon.log"
+    return log_dir() / "daemon.log"
 
 
 def gui_pid_file() -> Path:
@@ -41,7 +48,7 @@ def gui_pid_file() -> Path:
 
 
 def gui_log_file() -> Path:
-    return state_dir() / "gui.log"
+    return log_dir() / "gui.log"
 
 
 def python_executable() -> str:
@@ -127,7 +134,7 @@ def open_gui_url(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> None:
 
 
 def open_state_dir() -> None:
-    path = state_dir()
+    path = log_dir()
     if _command_exists("xdg-open"):
         subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:

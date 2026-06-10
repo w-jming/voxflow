@@ -7,9 +7,12 @@ import json
 import os
 import tomllib
 
+from .paths import legacy_user_config_path, user_config_path
+
 
 SYSTEM_CONFIG_PATH = Path("/etc/voxflow/config.toml")
-DEFAULT_CONFIG_PATH = Path("~/.config/voxflow/config.toml").expanduser()
+DEFAULT_CONFIG_PATH = user_config_path()
+LEGACY_CONFIG_PATH = legacy_user_config_path()
 
 
 @dataclass(slots=True)
@@ -87,8 +90,12 @@ def load_config(path: str | os.PathLike[str] | None = None) -> AppConfig:
     config = AppConfig()
     if SYSTEM_CONFIG_PATH.exists():
         config = _load_single_config(SYSTEM_CONFIG_PATH, config)
-    if DEFAULT_CONFIG_PATH.exists():
-        config = _load_single_config(DEFAULT_CONFIG_PATH, config)
+    legacy_path = legacy_user_config_path()
+    default_path = user_config_path()
+    if legacy_path.exists() and legacy_path != default_path:
+        config = _load_single_config(legacy_path, config)
+    if default_path.exists():
+        config = _load_single_config(default_path, config)
     return _normalize_config(config)
 
 
@@ -118,7 +125,7 @@ def save_user_daemon_settings(
 ) -> Path:
     from .hotkey import parse_hotkey
 
-    config_path = Path(path).expanduser() if path else DEFAULT_CONFIG_PATH
+    config_path = _user_config_path(path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     updated = text
@@ -133,7 +140,7 @@ def save_user_daemon_settings(
 
 
 def save_user_text_script(script: str, path: str | os.PathLike[str] | None = None) -> Path:
-    config_path = Path(path).expanduser() if path else DEFAULT_CONFIG_PATH
+    config_path = _user_config_path(path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     updated = _set_toml_value(text, "text", "script", normalize_script(script))
@@ -143,7 +150,7 @@ def save_user_text_script(script: str, path: str | os.PathLike[str] | None = Non
 
 
 def save_user_text_semantic_correction(enabled: bool, path: str | os.PathLike[str] | None = None) -> Path:
-    config_path = Path(path).expanduser() if path else DEFAULT_CONFIG_PATH
+    config_path = _user_config_path(path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     updated = _set_toml_value(text, "text", "semantic_correction_enabled", enabled)
@@ -156,7 +163,7 @@ def save_user_text_semantic_intent_backend(
     backend: str,
     path: str | os.PathLike[str] | None = None,
 ) -> Path:
-    config_path = Path(path).expanduser() if path else DEFAULT_CONFIG_PATH
+    config_path = _user_config_path(path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     updated = _set_toml_value(text, "text", "semantic_intent_backend", normalize_semantic_intent_backend(backend))
@@ -173,7 +180,7 @@ def save_user_asr_settings(
     language: str | None = None,
     path: str | os.PathLike[str] | None = None,
 ) -> Path:
-    config_path = Path(path).expanduser() if path else DEFAULT_CONFIG_PATH
+    config_path = _user_config_path(path)
     config_path.parent.mkdir(parents=True, exist_ok=True)
     updated = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
     for key, value in {
@@ -251,6 +258,10 @@ def _normalize_config(config: AppConfig) -> AppConfig:
     config.text.semantic_intent_backend = normalize_semantic_intent_backend(config.text.semantic_intent_backend)
     config.daemon.hotkey_mode = normalize_hotkey_mode(config.daemon.hotkey_mode)
     return config
+
+
+def _user_config_path(path: str | os.PathLike[str] | None = None) -> Path:
+    return Path(path).expanduser() if path else user_config_path()
 
 
 def _set_toml_value(text: str, section: str, key: str, value: Any) -> str:

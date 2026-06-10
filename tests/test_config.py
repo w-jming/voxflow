@@ -101,6 +101,17 @@ def test_save_user_text_semantic_intent_backend_writes_backend(tmp_path):
     assert data["text"]["semantic_intent_backend"] == "rules"
 
 
+def test_user_config_defaults_to_voxflow_home(monkeypatch, tmp_path):
+    home = tmp_path / "voxflow-home"
+    monkeypatch.setenv("VOXFLOW_HOME", str(home))
+
+    path = save_user_text_script("traditional")
+
+    assert path == home / "config.toml"
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert data["text"]["script"] == "traditional"
+
+
 def test_load_config_normalizes_aliases(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text(

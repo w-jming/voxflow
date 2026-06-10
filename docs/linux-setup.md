@@ -108,7 +108,7 @@ voxflow-daemon
 如果是从应用菜单或 `voxflow-gui` 打开的，后台服务会自动启动，不需要再手动执行上面的命令。日志位置：
 
 ```bash
-~/.local/state/voxflow/daemon.log
+~/.voxflow/logs/daemon.log
 ```
 
 默认快捷键：
@@ -139,9 +139,24 @@ ctrl+alt+return
 super+space
 ```
 
-保存后会写入 `~/.config/voxflow/config.toml`，并重启正在运行的后台输入服务。右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录或退出 VoxFlow；退出 VoxFlow 会停止后台输入服务。
+保存后会写入 `~/.voxflow/config.toml`，并重启正在运行的后台输入服务。右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录或退出 VoxFlow；退出 VoxFlow 会停止后台输入服务。
 
 Wayland 对全局快捷键和模拟输入限制较多；当前版本优先保证 X11 可用。
+
+## 用户数据目录
+
+VoxFlow 的用户数据根目录默认是：
+
+```text
+~/.voxflow/
+```
+
+其中 `models/` 存放下载的大模型，`logs/` 存放日志，`run/` 存放 pid 等运行状态，`cache/` 存放缓存，`config.toml` 存放用户设置。可以通过环境变量自定义：
+
+```bash
+export VOXFLOW_HOME=/data/voxflow
+voxflow-gui
+```
 
 ## IBus 系统输入法模式
 

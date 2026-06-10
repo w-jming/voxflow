@@ -18,6 +18,22 @@ voxflow-gui
 
 这个入口会启动后台输入服务、右上角图标和本地控制台。
 
+也可以使用解压版安装到任意目录，例如 `/data/apps/voxflow`：
+
+```bash
+mkdir -p /data/apps
+tar -xzf dist/voxflow-0.2.0_amd64.tar.gz -C /data/apps
+/data/apps/voxflow-0.2.0/bin/voxflow doctor
+/data/apps/voxflow-0.2.0/bin/voxflow-gui
+```
+
+可选安装用户级桌面入口和 IBus component：
+
+```bash
+/data/apps/voxflow-0.2.0/bin/voxflow-install-desktop
+/data/apps/voxflow-0.2.0/bin/voxflow-install-ibus
+```
+
 ## 使用
 
 默认快捷键是 `Ctrl+Space`，默认模式是“按一次开始录音，再按一次停止并输入”。把光标放到终端、浏览器搜索框、编辑器或聊天窗口后按快捷键即可输入。
@@ -31,6 +47,31 @@ voxflow-gui
 - 语音模型：内置轻量模型、Qwen3-ASR 0.6B、Qwen3-ASR 1.7B。
 
 右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录，以及退出 VoxFlow。退出 VoxFlow 会停止后台输入服务。
+
+## 安装位置与数据目录
+
+`apt install` 会把程序本体安装到系统目录，包括 `/usr/bin`、`/usr/share`、`/etc/voxflow` 和 `/opt/voxflow/venv`，因此会占用 `/` 所在分区的少量软件运行空间。大体积和会增长的数据不放进系统目录。
+
+VoxFlow 的用户数据根目录由 `VOXFLOW_HOME` 控制，默认是：
+
+```text
+~/.voxflow/
+```
+
+其中：
+
+- `~/.voxflow/config.toml`：用户设置。
+- `~/.voxflow/models/`：下载的 Qwen3-ASR 等大模型。
+- `~/.voxflow/logs/`：GUI、daemon、tray 日志。
+- `~/.voxflow/run/`：pid 等运行状态文件。
+- `~/.voxflow/cache/`：预留缓存目录。
+
+自定义目录示例：
+
+```bash
+export VOXFLOW_HOME=/data/voxflow
+voxflow-gui
+```
 
 ## 系统输入法模式
 
@@ -61,7 +102,35 @@ voxflow models --download qwen3-asr-1.7b
 voxflow models --select qwen3-asr-1.7b
 ```
 
-Qwen3-ASR 0.6B/1.7B 使用官方 Hugging Face 模型仓库，许可证为 Apache-2.0。本机高准确率 deb 默认打包 Qwen3-ASR 1.7B，不把大模型权重提交到源码仓库。
+Qwen3-ASR 0.6B/1.7B 使用官方 Hugging Face 模型仓库，许可证为 Apache-2.0。deb 默认不打包这些大模型；点击控制台“下载”或运行 `voxflow models --download ...` 后，模型会进入 `~/.voxflow/models/` 或 `$VOXFLOW_HOME/models/`。
+
+如果本机已经有 Qwen3-ASR 权重，可以先校验它是否为 VoxFlow 支持的官方权重：
+
+```bash
+voxflow models --select qwen3-asr-1.7b --validate-model /path/to/Qwen3-ASR-1.7B
+```
+
+校验会检查必需文件、`config.json` 架构、safetensors 索引/头部，并对官方 safetensors 权重文件做 SHA256 比对。校验失败时 VoxFlow 不会写入配置。
+
+如果本机已经有 Qwen3-ASR 权重，不需要重复下载。可以把已有目录导入到 VoxFlow 模型目录：
+
+```bash
+voxflow models --select qwen3-asr-1.7b --import-model /path/to/Qwen3-ASR-1.7B
+```
+
+如果不想复制 4GB+ 权重，可以创建符号链接：
+
+```bash
+voxflow models --select qwen3-asr-1.7b --import-model /path/to/Qwen3-ASR-1.7B --symlink
+```
+
+本机当前下载目录也可以这样复用：
+
+```bash
+voxflow models --select qwen3-asr-1.7b --import-model downloads/models/Qwen3-ASR-1.7B --symlink
+```
+
+导入或软链接导入时会自动执行同样的 SHA256 和格式校验；通过后才会把模型路径写入 `~/.voxflow/config.toml`。
 
 ## 诊断
 
@@ -74,7 +143,7 @@ voxflow doctor
 查看后台日志：
 
 ```bash
-tail -n 80 ~/.local/state/voxflow/daemon.log
+tail -n 80 ~/.voxflow/logs/daemon.log
 ```
 
 命令行一次性听写：
@@ -101,10 +170,16 @@ python3 -m compileall src tests
 scripts/build_deb.sh
 ```
 
-默认会构建包含 Qwen3-ASR 1.7B 的本机高准确率包。要构建轻量包：
+构建解压版：
 
 ```bash
-VOXFLOW_BUNDLE_PROFILE=bundled-faster-whisper-tiny scripts/build_deb.sh
+scripts/build_portable.sh
+```
+
+默认构建轻量可用包，不把大模型写入 `/opt`。如果只想构建并测试：
+
+```bash
+scripts/build_deb.sh
 ```
 
 ## 许可证

@@ -12,7 +12,14 @@ import sys
 from . import __version__
 from .audio import NoSpeechDetected
 from .config import AppConfig, load_config, save_user_asr_settings
-from .model_registry import download_model_profile, get_model_profile, list_model_profiles, model_cache_dir
+from .model_registry import (
+    download_model_profile,
+    get_model_profile,
+    import_model_profile,
+    list_model_profiles,
+    model_cache_dir,
+    validate_model_profile,
+)
 from .runtime import DictationRunner, process_audio_file
 
 
@@ -24,7 +31,6 @@ def main(argv: list[str] | None = None) -> int:
         return doctor()
     if args.command == "models":
         return handle_models(args)
-        return 0
     if args.command == "gui":
         config = load_config(args.config)
         apply_overrides(config, args)
@@ -130,6 +136,9 @@ def build_parser() -> argparse.ArgumentParser:
     models = subparsers.add_parser("models", help="列出、下载或选择 ASR 模型")
     models.add_argument("--download", choices=[profile.id for profile in list_model_profiles()], help="下载模型到本地缓存")
     models.add_argument("--select", choices=[profile.id for profile in list_model_profiles()], help="把模型档位写入用户配置")
+    models.add_argument("--import-model", type=Path, help="导入已有本地模型目录，避免重复下载")
+    models.add_argument("--validate-model", type=Path, help="校验已有本地模型目录，不导入也不切换")
+    models.add_argument("--symlink", action="store_true", help="配合 --import-model 使用，创建符号链接而不是复制模型")
     models.add_argument("--dir", type=Path, default=model_cache_dir(), help="模型下载目录")
     return parser
 
@@ -222,6 +231,33 @@ def _ibus_status() -> str:
 
 
 def handle_models(args: argparse.Namespace) -> int:
+    if args.validate_model:
+        if not args.select:
+            raise SystemExit("--validate-model 需要同时指定 --select 模型档位")
+        profile = get_model_profile(args.select)
+        print("正在校验模型身份、格式和 SHA256...")
+        result = validate_model_profile(profile.id, args.validate_model)
+        print(f"校验通过：{profile.label}")
+        print(f"路径：{result.path}")
+        print(f"官方 revision：{result.revision}")
+        print(f"已检查文件数：{len(result.checked_files)}")
+        for warning in result.warnings:
+            print(f"警告：{warning}")
+        return 0
+
+    if args.import_model:
+        if not args.select:
+            raise SystemExit("--import-model 需要同时指定 --select 模型档位")
+        profile = get_model_profile(args.select)
+        print("正在校验模型身份、格式和 SHA256...")
+        path = import_model_profile(profile.id, args.import_model, args.dir, symlink=args.symlink)
+        config_path = save_user_asr_settings(backend=profile.backend, model=str(path))
+        print(f"已导入：{profile.label}")
+        print("校验通过：官方 SHA256 与模型结构匹配")
+        print(path)
+        print(f"配置：{config_path}")
+        return 0
+
     if args.download:
         profile = get_model_profile(args.download)
         path = download_model_profile(profile.id, args.dir)
@@ -243,7 +279,7 @@ def handle_models(args: argparse.Namespace) -> int:
         if profile.source_default:
             marker.append("源码默认")
         if profile.package_default:
-            marker.append("本机高准确率包默认")
+            marker.append("deb 默认")
         suffix = f" ({'，'.join(marker)})" if marker else ""
         print(f"{profile.id}: {profile.label}{suffix}")
         print(f"  后端/模型: {profile.backend} / {profile.model}")
@@ -252,6 +288,8 @@ def handle_models(args: argparse.Namespace) -> int:
         print(f"  官方地址: {profile.source}")
     print("下载示例：voxflow models --download qwen3-asr-0.6b")
     print("选择示例：voxflow models --select qwen3-asr-0.6b")
+    print("校验示例：voxflow models --select qwen3-asr-1.7b --validate-model /path/to/Qwen3-ASR-1.7B")
+    print("导入示例：voxflow models --select qwen3-asr-1.7b --import-model /path/to/Qwen3-ASR-1.7B --symlink")
     return 0
 if __name__ == "__main__":
     raise SystemExit(main())

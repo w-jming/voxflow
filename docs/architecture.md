@@ -12,7 +12,8 @@
 - `voxflow.gui`：无额外后端依赖的本地 Web 控制台。
 - `voxflow.hotkey` / `voxflow.daemon`：X11 全局快捷键和后台语音输入服务。
 - `voxflow.tray` / `voxflow.service_control`：右上角 AppIndicator 控制图标和 GUI/daemon 进程管理。
-- `voxflow.model_registry`：模型档位、许可证、官方来源和下载/选择逻辑。
+- `voxflow.model_registry`：模型档位、许可证、官方来源、下载/选择逻辑，以及本地模型导入前的必需文件、`config.json`、safetensors 和官方 SHA256 校验。
+- `voxflow.paths`：统一用户数据目录，默认 `~/.voxflow`，可通过 `VOXFLOW_HOME` 自定义。
 
 ## 口语修正算法
 
@@ -47,4 +48,4 @@ Web 控制台的“系统输入”由后端调用系统输入工具实现。浏�
 
 deb 包同时注册 IBus 引擎 `VoxFlow Input`。IBus 模式不依赖剪贴板或窗口重激活：引擎直接把临时识别显示为 preedit，把稳定分句 commit 到当前输入上下文；撤销命令经过 `InjectionLedger` 限制，只删除 VoxFlow 在当前会话提交过的字符。当前实现是分块稳定提交，不宣称 token 级实时流式 ASR。
 
-控制台提供设置接口，只更新用户级 `~/.config/voxflow/config.toml`，可保存快捷键、录音模式、输出字形和 ASR 模型。右上角图标使用 GTK AppIndicator，负责启动/停止/重启后台输入、打开控制台和退出 VoxFlow；退出 VoxFlow 会停止后台 daemon 和 GUI。
+控制台提供设置接口，只更新用户级 `$VOXFLOW_HOME/config.toml`，默认是 `~/.voxflow/config.toml`；旧版 `~/.config/voxflow/config.toml` 仍会被读取以兼容升级。下载模型位于 `$VOXFLOW_HOME/models`，日志位于 `$VOXFLOW_HOME/logs`，pid 等运行状态位于 `$VOXFLOW_HOME/run`。本地 Qwen 权重导入或软链接导入时，VoxFlow 会先做模型身份和格式校验，通过后才写入用户配置。右上角图标使用 GTK AppIndicator，负责启动/停止/重启后台输入、打开控制台和退出 VoxFlow；退出 VoxFlow 会停止后台 daemon 和 GUI。

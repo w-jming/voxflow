@@ -29,6 +29,7 @@ from .hotkey import parse_hotkey
 from .input import apply_actions, build_injector
 from .postprocess import DictationSession, EditAction
 from .model_registry import download_model_profile, get_model_profile, list_model_profiles, model_cache_dir
+from .paths import app_home, cache_dir, logs_dir, run_dir, user_config_path
 from .semantic_intent import list_semantic_intent_backends
 from .service_control import daemon_status, restart_daemon
 
@@ -81,6 +82,14 @@ class GuiHandler(BaseHTTPRequestHandler):
                     "input": asdict(self.server.state.config.input),
                     "audio": asdict(self.server.state.config.audio),
                     "daemon": asdict(self.server.state.config.daemon),
+                    "paths": {
+                        "home": str(app_home()),
+                        "config": str(user_config_path()),
+                        "models": str(model_cache_dir()),
+                        "logs": str(logs_dir()),
+                        "run": str(run_dir()),
+                        "cache": str(cache_dir()),
+                    },
                 }
             )
             return

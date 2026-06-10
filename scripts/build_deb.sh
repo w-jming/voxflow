@@ -12,39 +12,20 @@ with open("pyproject.toml", "rb") as fh:
 PY
 )"
 ARCH="${VOXFLOW_DEB_ARCH:-amd64}"
-BUNDLE_PROFILE="${VOXFLOW_BUNDLE_PROFILE:-qwen3-asr-1.7b}"
+INCLUDE_QWEN_RUNTIME="${VOXFLOW_INCLUDE_QWEN_RUNTIME:-0}"
 BUILD_DIR="$ROOT_DIR/build/deb"
 ROOTFS="$BUILD_DIR/rootfs"
 VENV_DIR="$ROOTFS/opt/voxflow/venv"
 DIST_DIR="$ROOT_DIR/dist"
 DEB_PATH="$DIST_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
-case "$BUNDLE_PROFILE" in
-  qwen3-asr-1.7b)
-    MODEL_REPO="${VOXFLOW_BUNDLE_MODEL_REPO:-Qwen/Qwen3-ASR-1.7B}"
-    MODEL_NAME="${VOXFLOW_BUNDLE_MODEL_NAME:-Qwen3-ASR-1.7B}"
-    ASR_BACKEND="qwen"
-    VENV_EXTRAS=".[qwen,mic]"
-    ;;
-  qwen3-asr-0.6b)
-    MODEL_REPO="${VOXFLOW_BUNDLE_MODEL_REPO:-Qwen/Qwen3-ASR-0.6B}"
-    MODEL_NAME="${VOXFLOW_BUNDLE_MODEL_NAME:-Qwen3-ASR-0.6B}"
-    ASR_BACKEND="qwen"
-    VENV_EXTRAS=".[qwen,mic]"
-    ;;
-  bundled-faster-whisper-tiny)
-    MODEL_REPO=""
-    MODEL_NAME="faster-whisper-tiny"
-    ASR_BACKEND="faster-whisper"
-    VENV_EXTRAS=".[mic]"
-    ;;
-  *)
-    printf 'Unknown VOXFLOW_BUNDLE_PROFILE: %s\n' "$BUNDLE_PROFILE" >&2
-    exit 2
-    ;;
-esac
-MODEL_DIR="$ROOTFS/opt/voxflow/models/$MODEL_NAME"
-MODEL_CACHE_DIR="${VOXFLOW_MODEL_CACHE_DIR:-$ROOT_DIR/downloads/models/$MODEL_NAME}"
+ASR_BACKEND="faster-whisper"
+ASR_MODEL="bundled:faster-whisper-tiny"
+if [ "$INCLUDE_QWEN_RUNTIME" = "1" ]; then
+  VENV_EXTRAS=".[qwen,mic]"
+else
+  VENV_EXTRAS=".[mic]"
+fi
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$ROOTFS/DEBIAN" "$DIST_DIR"
@@ -59,24 +40,7 @@ mkdir -p "$ROOTFS/usr/share/ibus/component"
 
 uv venv --relocatable --python python3 "$VENV_DIR"
 uv pip install --python "$VENV_DIR/bin/python" --link-mode copy "$VENV_EXTRAS"
-
-if [ -n "$MODEL_REPO" ]; then
-  mkdir -p "$MODEL_CACHE_DIR"
-  "$VENV_DIR/bin/python" - <<PY
-from huggingface_hub import snapshot_download
-snapshot_download(
-    repo_id="$MODEL_REPO",
-    local_dir="$MODEL_CACHE_DIR",
-    local_dir_use_symlinks=False,
-)
-PY
-  mkdir -p "$MODEL_DIR"
-  cp -a "$MODEL_CACHE_DIR"/. "$MODEL_DIR"/
-else
-  mkdir -p "$MODEL_DIR"
-  cp -a src/voxflow/bundled/faster-whisper-tiny/. "$MODEL_DIR/"
-fi
-rm -rf "$MODEL_DIR/.cache"
+find "$VENV_DIR" -path '*/voxflow-*.dist-info/direct_url.json' -delete
 
 install -m 0755 packaging/scripts/voxflow "$ROOTFS/usr/bin/voxflow"
 install -m 0755 packaging/scripts/voxflow-gui "$ROOTFS/usr/bin/voxflow-gui"
@@ -93,7 +57,7 @@ from pathlib import Path
 path = Path("$ROOTFS/etc/voxflow/config.toml")
 text = path.read_text(encoding="utf-8")
 text = text.replace('backend = "faster-whisper"', 'backend = "$ASR_BACKEND"', 1)
-text = text.replace('model = "bundled:faster-whisper-tiny"', 'model = "/opt/voxflow/models/$MODEL_NAME"', 1)
+text = text.replace('model = "bundled:faster-whisper-tiny"', 'model = "$ASR_MODEL"', 1)
 path.write_text(text, encoding="utf-8")
 PY
 install -m 0644 packaging/debian/voxflow.desktop "$ROOTFS/usr/share/applications/voxflow.desktop"
@@ -127,8 +91,9 @@ Installed-Size: $(du -sk "$ROOTFS" | cut -f1)
 Description: VoxFlow Input voice input method for Linux
  VoxFlow Input provides a local web console, desktop launcher, top-bar
  indicator, configurable background hotkey daemon, desktop notifications, and
- command-line tools for Chinese and English speech input on Linux. The package
- bundles the Python runtime dependencies and the selected ASR model.
+ command-line tools for Chinese and English speech input on Linux. Large user
+ data such as downloaded ASR models, logs, pid files, and user settings live
+ under VOXFLOW_HOME, defaulting to ~/.voxflow.
 EOF
 
 chmod -R go-w "$ROOTFS"
