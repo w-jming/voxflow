@@ -11,6 +11,9 @@ from voxflow.model_registry import (
     import_model_profile,
     list_model_profiles,
     model_cache_dir,
+    model_downloaded_bytes,
+    model_expected_bytes,
+    model_local_dir,
     package_default_profile,
     source_default_profile,
     validate_model_profile,
@@ -127,6 +130,22 @@ def test_import_model_profile_reuses_existing_valid_cache(monkeypatch, tmp_path)
     reused = import_model_profile("qwen3-asr-0.6b", source, models, symlink=True)
 
     assert reused == existing
+
+
+def test_model_download_progress_counts_completed_and_partial_weights(monkeypatch, tmp_path):
+    _install_fake_qwen_validation(monkeypatch, "qwen3-asr-0.6b", "0" * 64, size=100)
+    local_dir = model_local_dir("qwen3-asr-0.6b", tmp_path)
+    cache = local_dir / ".cache" / "huggingface" / "download"
+    cache.mkdir(parents=True)
+    (cache / "chunk.incomplete").write_bytes(b"x" * 35)
+
+    assert model_expected_bytes("qwen3-asr-0.6b") == 100
+    assert model_downloaded_bytes("qwen3-asr-0.6b", tmp_path) == 35
+
+    local_dir.mkdir(parents=True, exist_ok=True)
+    (local_dir / "model.safetensors").write_bytes(b"x" * 100)
+
+    assert model_downloaded_bytes("qwen3-asr-0.6b", tmp_path) == 100
 
 
 def test_all_model_profiles_include_license_and_official_source():

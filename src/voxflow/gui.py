@@ -9,8 +9,13 @@ from typing import Any
 import cgi
 import json
 import mimetypes
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import threading
+import time
 
 from .asr import Recognizer, build_recognizer
 from .config import (
@@ -28,10 +33,122 @@ from .config import (
 from .hotkey import parse_hotkey
 from .input import apply_actions, build_injector
 from .postprocess import DictationSession, EditAction
-from .model_registry import download_model_profile, get_model_profile, list_model_profiles, model_cache_dir
-from .paths import app_home, cache_dir, logs_dir, run_dir, user_config_path
+from .model_registry import (
+    get_model_profile,
+    import_model_profile,
+    list_model_profiles,
+    model_cache_dir,
+    model_downloaded_bytes,
+    model_expected_bytes,
+    model_local_dir,
+    validate_model_profile,
+)
+from .paths import app_home, app_home_source, cache_dir, logs_dir, run_dir, set_app_home, user_config_path
 from .semantic_intent import list_semantic_intent_backends
 from .service_control import daemon_status, restart_daemon
+
+
+class ModelDownloadManager:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.process: subprocess.Popen[str] | None = None
+        self.thread: threading.Thread | None = None
+        self.job: dict[str, Any] = {"status": "idle"}
+        self.pause_requested = False
+
+    def start(self, profile_id: str, target_dir: Path) -> dict[str, Any]:
+        profile = get_model_profile(profile_id)
+        if profile.model.startswith("bundled:"):
+            raise ValueError("内置轻量模型已经随软件安装，不需要下载。")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        with self.lock:
+            if self.process and self.process.poll() is None:
+                if self.job.get("model_profile") == profile_id:
+                    return self._status_locked()
+                raise RuntimeError("已有模型正在下载，请先暂停当前下载。")
+            self.pause_requested = False
+            now = time.monotonic()
+            self.job = {
+                "status": "downloading",
+                "model_profile": profile_id,
+                "label": profile.label,
+                "path": str(model_local_dir(profile_id, target_dir)),
+                "target_dir": str(target_dir),
+                "bytes": model_downloaded_bytes(profile_id, target_dir),
+                "total_bytes": model_expected_bytes(profile_id),
+                "speed_bps": 0.0,
+                "started_at": now,
+                "updated_at": now,
+                "error": "",
+            }
+            self.process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "voxflow.download_worker",
+                    "--profile",
+                    profile_id,
+                    "--dir",
+                    str(target_dir),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.thread = threading.Thread(target=self._monitor, daemon=True)
+            self.thread.start()
+            return self._status_locked()
+
+    def pause(self) -> dict[str, Any]:
+        with self.lock:
+            if self.process and self.process.poll() is None:
+                self.pause_requested = True
+                self.process.terminate()
+                self.job["status"] = "pausing"
+            return self._status_locked()
+
+    def status(self) -> dict[str, Any]:
+        with self.lock:
+            return self._status_locked()
+
+    def _monitor(self) -> None:
+        process = self.process
+        if process is None:
+            return
+        stdout, stderr = process.communicate()
+        with self.lock:
+            profile_id = str(self.job.get("model_profile", ""))
+            target_dir = Path(str(self.job.get("target_dir", model_cache_dir())))
+            if self.pause_requested:
+                self.job["status"] = "paused"
+                self.job["error"] = ""
+            elif process.returncode == 0:
+                self.job["status"] = "completed"
+                self.job["error"] = ""
+            else:
+                self.job["status"] = "failed"
+                self.job["error"] = _tail_text(stderr or stdout or "下载失败")
+            if profile_id:
+                self.job["bytes"] = model_downloaded_bytes(profile_id, target_dir)
+            self.job["speed_bps"] = 0.0
+            self.job["updated_at"] = time.monotonic()
+            self.process = None
+
+    def _status_locked(self) -> dict[str, Any]:
+        profile_id = str(self.job.get("model_profile", ""))
+        target_dir = Path(str(self.job.get("target_dir", model_cache_dir())))
+        now = time.monotonic()
+        if profile_id:
+            previous_bytes = int(self.job.get("bytes", 0))
+            previous_time = float(self.job.get("updated_at", now))
+            current_bytes = model_downloaded_bytes(profile_id, target_dir)
+            elapsed = max(0.001, now - previous_time)
+            if self.job.get("status") in {"downloading", "pausing"}:
+                self.job["speed_bps"] = max(0.0, (current_bytes - previous_bytes) / elapsed)
+            self.job["bytes"] = current_bytes
+            self.job["total_bytes"] = model_expected_bytes(profile_id)
+            self.job["updated_at"] = now
+        return dict(self.job)
 
 
 class GuiState:
@@ -47,6 +164,7 @@ class GuiState:
         self.injector = None
         self.recognizer: Recognizer | None = None
         self.lock = threading.Lock()
+        self.downloads = ModelDownloadManager()
 
     def get_recognizer(self) -> Recognizer:
         with self.lock:
@@ -84,6 +202,8 @@ class GuiHandler(BaseHTTPRequestHandler):
                     "daemon": asdict(self.server.state.config.daemon),
                     "paths": {
                         "home": str(app_home()),
+                        "source": app_home_source(),
+                        "env_locked": "VOXFLOW_HOME" in os.environ,
                         "config": str(user_config_path()),
                         "models": str(model_cache_dir()),
                         "logs": str(logs_dir()),
@@ -98,6 +218,9 @@ class GuiHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/semantic-intent":
             self._send_json({"backends": [backend.to_dict() for backend in list_semantic_intent_backends()]})
+            return
+        if self.path == "/api/models/download/status":
+            self._send_json(self.server.state.downloads.status())
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -152,8 +275,19 @@ class GuiHandler(BaseHTTPRequestHandler):
                 semantic_correction = payload.get("semantic_correction_enabled")
                 semantic_intent_backend = _optional_str(payload.get("semantic_intent_backend"))
                 model_profile = _optional_str(payload.get("model_profile"))
+                app_home_value = _optional_path(payload.get("app_home"))
 
                 config_path = None
+                if app_home_value is not None:
+                    if os.environ.get("VOXFLOW_HOME"):
+                        raise ValueError("当前数据目录由 VOXFLOW_HOME 环境变量控制，不能在控制台内覆盖。")
+                    old_config_path = user_config_path()
+                    new_home = set_app_home(app_home_value)
+                    new_config_path = user_config_path()
+                    if old_config_path.exists() and not new_config_path.exists():
+                        new_config_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(old_config_path, new_config_path)
+                    config_path = new_config_path
                 if model_profile is not None:
                     profile = get_model_profile(model_profile)
                     local_path = model_cache_dir() / profile.model.split("/")[-1]
@@ -201,6 +335,16 @@ class GuiHandler(BaseHTTPRequestHandler):
                         "semantic_correction_enabled": self.server.state.config.text.semantic_correction_enabled,
                         "semantic_intent_backend": self.server.state.config.text.semantic_intent_backend,
                         "asr": asdict(self.server.state.config.asr),
+                        "paths": {
+                            "home": str(app_home()),
+                            "source": app_home_source(),
+                            "env_locked": "VOXFLOW_HOME" in os.environ,
+                            "config": str(user_config_path()),
+                            "models": str(model_cache_dir()),
+                            "logs": str(logs_dir()),
+                            "run": str(run_dir()),
+                            "cache": str(cache_dir()),
+                        },
                         "config_path": str(config_path) if config_path else "",
                         "daemon_restarted": restarted,
                     }
@@ -213,8 +357,55 @@ class GuiHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             profile_id = str(payload.get("model_profile", "")).strip()
             try:
-                path = download_model_profile(profile_id, model_cache_dir())
-                self._send_json({"model_profile": profile_id, "path": str(path)})
+                self._send_json(self.server.state.downloads.start(profile_id, model_cache_dir()))
+            except Exception as exc:
+                self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        if self.path == "/api/models/download/pause":
+            self._send_json(self.server.state.downloads.pause())
+            return
+
+        if self.path == "/api/models/validate-local":
+            payload = self._read_json()
+            profile_id = str(payload.get("model_profile", "")).strip()
+            path = Path(str(payload.get("path", "")).strip()).expanduser()
+            try:
+                result = validate_model_profile(profile_id, path)
+                self._send_json(
+                    {
+                        "model_profile": profile_id,
+                        "path": str(result.path),
+                        "revision": result.revision,
+                        "checked_files": list(result.checked_files),
+                        "warnings": list(result.warnings),
+                    }
+                )
+            except Exception as exc:
+                self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        if self.path == "/api/models/import-local":
+            payload = self._read_json()
+            profile_id = str(payload.get("model_profile", "")).strip()
+            path = Path(str(payload.get("path", "")).strip()).expanduser()
+            symlink = bool(payload.get("symlink"))
+            try:
+                profile = get_model_profile(profile_id)
+                imported = import_model_profile(profile_id, path, model_cache_dir(), symlink=symlink)
+                config_path = save_user_asr_settings(backend=profile.backend, model=str(imported))
+                self.server.state.config.asr.backend = profile.backend
+                self.server.state.config.asr.model = str(imported)
+                self.server.state.recognizer = None
+                self._send_json(
+                    {
+                        "model_profile": profile_id,
+                        "path": str(imported),
+                        "symlink": imported.is_symlink(),
+                        "config_path": str(config_path),
+                        "asr": asdict(self.server.state.config.asr),
+                    }
+                )
             except Exception as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -342,3 +533,17 @@ def _optional_str(value: Any) -> str | None:
         return None
     text = str(value).strip().lower()
     return text if text else None
+
+
+def _optional_path(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def _tail_text(text: str, limit: int = 1200) -> str:
+    clean = text.strip()
+    if len(clean) <= limit:
+        return clean
+    return clean[-limit:]

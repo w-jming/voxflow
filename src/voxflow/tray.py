@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 
 from . import service_control
@@ -55,8 +56,7 @@ def main() -> int:
         return True
 
     def open_console(_item: object) -> None:
-        service_control.start_gui()
-        service_control.open_gui_url()
+        subprocess.Popen(["voxflow-gui"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         refresh()
 
     def start_daemon(_item: object) -> None:

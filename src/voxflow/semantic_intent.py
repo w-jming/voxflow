@@ -52,5 +52,8 @@ SEMANTIC_INTENT_BACKENDS = {
 }
 
 
-def list_semantic_intent_backends() -> list[SemanticIntentBackend]:
-    return list(SEMANTIC_INTENT_BACKENDS.values())
+def list_semantic_intent_backends(*, include_planned: bool = False) -> list[SemanticIntentBackend]:
+    backends = list(SEMANTIC_INTENT_BACKENDS.values())
+    if include_planned:
+        return backends
+    return [backend for backend in backends if backend.status == "available"]

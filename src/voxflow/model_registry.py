@@ -165,6 +165,49 @@ def model_cache_dir() -> Path:
     return models_dir()
 
 
+def model_local_dir(profile_id: str, target_dir: Path | None = None) -> Path:
+    profile = get_model_profile(profile_id)
+    if profile.model.startswith("bundled:"):
+        from .asr.factory import resolve_model_reference
+
+        return Path(resolve_model_reference(profile.model))
+    return (target_dir or model_cache_dir()) / profile.model.split("/")[-1]
+
+
+def model_expected_bytes(profile_id: str) -> int:
+    spec = MODEL_VALIDATION_SPECS.get(profile_id)
+    if spec is None:
+        return 0
+    return sum(file_spec.size or 0 for file_spec in spec.weight_files)
+
+
+def model_downloaded_bytes(profile_id: str, target_dir: Path | None = None) -> int:
+    spec = MODEL_VALIDATION_SPECS.get(profile_id)
+    if spec is None:
+        return 0
+    local_dir = model_local_dir(profile_id, target_dir)
+    completed = 0
+    missing_weight = False
+    for file_spec in spec.weight_files:
+        file_path = local_dir / file_spec.path
+        if file_path.exists():
+            size = file_path.stat().st_size
+            completed += min(size, file_spec.size or size)
+        else:
+            missing_weight = True
+    if not missing_weight:
+        return min(completed, model_expected_bytes(profile_id))
+
+    partial = 0
+    cache_dir = local_dir / ".cache" / "huggingface" / "download"
+    if cache_dir.exists():
+        for path in cache_dir.glob("*.incomplete"):
+            if path.is_file():
+                partial += path.stat().st_size
+    total = model_expected_bytes(profile_id)
+    return min(completed + partial, total) if total else completed + partial
+
+
 def download_model_profile(profile_id: str, target_dir: Path | None = None) -> Path:
     profile = get_model_profile(profile_id)
     if profile.model.startswith("bundled:"):
@@ -174,7 +217,7 @@ def download_model_profile(profile_id: str, target_dir: Path | None = None) -> P
 
     root = target_dir or model_cache_dir()
     root.mkdir(parents=True, exist_ok=True)
-    local_dir = root / profile.model.split("/")[-1]
+    local_dir = model_local_dir(profile_id, root)
     try:
         from huggingface_hub import snapshot_download
     except ImportError as exc:

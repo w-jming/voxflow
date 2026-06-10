@@ -6,8 +6,8 @@ const state = {
   chunks: [],
   recording: false,
   animationId: null,
+  downloadPoll: null,
   models: [],
-  semanticBackends: [],
 };
 
 const el = {
@@ -33,11 +33,19 @@ const el = {
   modeSelect: document.getElementById("modeSelect"),
   scriptSelect: document.getElementById("scriptSelect"),
   modelSelect: document.getElementById("modelSelect"),
+  appHomeInput: document.getElementById("appHomeInput"),
   semanticToggle: document.getElementById("semanticToggle"),
-  semanticBackendSelect: document.getElementById("semanticBackendSelect"),
   hotkeyMessage: document.getElementById("hotkeyMessage"),
   saveHotkeyBtn: document.getElementById("saveHotkeyBtn"),
   downloadModelBtn: document.getElementById("downloadModelBtn"),
+  pauseDownloadBtn: document.getElementById("pauseDownloadBtn"),
+  downloadProgress: document.getElementById("downloadProgress"),
+  downloadText: document.getElementById("downloadText"),
+  modelSummary: document.getElementById("modelSummary"),
+  localModelPath: document.getElementById("localModelPath"),
+  validateLocalModelBtn: document.getElementById("validateLocalModelBtn"),
+  importLocalModelBtn: document.getElementById("importLocalModelBtn"),
+  linkLocalModelBtn: document.getElementById("linkLocalModelBtn"),
 };
 
 function setStatus(text, mode = "ready") {
@@ -78,18 +86,16 @@ function renderResult(payload) {
 }
 
 async function loadConfig() {
-  const [configResponse, modelsResponse, semanticResponse] = await Promise.all([
+  const [configResponse, modelsResponse, downloadResponse] = await Promise.all([
     fetch("/api/config"),
     fetch("/api/models"),
-    fetch("/api/semantic-intent"),
+    fetch("/api/models/download/status"),
   ]);
   const config = await configResponse.json();
   const modelsPayload = await modelsResponse.json();
-  const semanticPayload = await semanticResponse.json();
+  const downloadPayload = await downloadResponse.json();
   state.models = modelsPayload.models || [];
-  state.semanticBackends = semanticPayload.backends || [];
   renderModelOptions(config.asr || {});
-  renderSemanticBackendOptions(config.text?.semantic_intent_backend || "rules");
   const hotkey = config.daemon?.hotkey || "ctrl+space";
   const mode = config.daemon?.hotkey_mode || "toggle";
   const script = config.text?.script || "simplified";
@@ -102,19 +108,9 @@ async function loadConfig() {
   el.modeSelect.value = mode;
   el.scriptSelect.value = script;
   el.semanticToggle.checked = semanticCorrection;
-}
-
-function renderSemanticBackendOptions(selectedBackend) {
-  el.semanticBackendSelect.innerHTML = "";
-  state.semanticBackends.forEach((backend) => {
-    const option = document.createElement("option");
-    option.value = backend.id;
-    option.textContent = backend.status === "available" ? backend.label : `${backend.label}（需训练/安装）`;
-    option.title = `${backend.model} · ${backend.license}`;
-    option.disabled = backend.status !== "available";
-    el.semanticBackendSelect.appendChild(option);
-  });
-  el.semanticBackendSelect.value = selectedBackend;
+  el.appHomeInput.value = config.paths?.home || "";
+  el.appHomeInput.disabled = Boolean(config.paths?.env_locked);
+  renderDownloadStatus(downloadPayload);
 }
 
 function renderModelOptions(asr) {
@@ -130,11 +126,35 @@ function renderModelOptions(asr) {
   if (selected) {
     el.modelSelect.value = selected.id;
   }
+  renderModelSummary();
 }
 
 function modelLabel(asr) {
   const selected = state.models.find((model) => modelMatchesAsr(model, asr));
   return selected ? selected.label : (asr?.model || "");
+}
+
+function selectedModel() {
+  return state.models.find((model) => model.id === el.modelSelect.value) || state.models[0];
+}
+
+function renderModelSummary() {
+  const model = selectedModel();
+  if (!model) {
+    el.modelSummary.textContent = "未读取到模型列表";
+    return;
+  }
+  el.modelSummary.textContent = `${model.label} · ${model.size} · ${model.languages} · ${model.license}`;
+  const canDownload = !model.model.startsWith("bundled:");
+  el.downloadModelBtn.disabled = !canDownload;
+  el.pauseDownloadBtn.disabled = true;
+  if (!canDownload) {
+    el.downloadText.textContent = "内置模型已随软件安装";
+    el.downloadProgress.style.width = "100%";
+  } else {
+    el.downloadText.textContent = "未下载";
+    el.downloadProgress.style.width = "0%";
+  }
 }
 
 function modelMatchesAsr(model, asr) {
@@ -168,6 +188,29 @@ function formatScript(value) {
   if (value === "traditional") return "繁体中文";
   if (value === "original") return "模型原文";
   return "简体中文";
+}
+
+function formatBytes(value) {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let amount = Number(value || 0);
+  for (const unit of units) {
+    if (amount < 1024 || unit === units[units.length - 1]) {
+      return unit === "B" ? `${amount.toFixed(0)} B` : `${amount.toFixed(1)} ${unit}`;
+    }
+    amount /= 1024;
+  }
+  return `${amount.toFixed(1)} TB`;
+}
+
+function statusLabel(value) {
+  return {
+    downloading: "下载中",
+    pausing: "暂停中",
+    paused: "已暂停",
+    completed: "已完成",
+    failed: "失败",
+    idle: "未下载",
+  }[value] || value;
 }
 
 async function startRecording() {
@@ -253,11 +296,11 @@ function drawMeter() {
   const rms = Math.sqrt(sum / state.dataArray.length) / 128;
 
   const bandHeight = Math.max(10, rms * height * 0.92);
-  ctx.fillStyle = "rgba(20,125,115,0.12)";
+  ctx.fillStyle = "rgba(29,167,232,0.15)";
   ctx.fillRect(0, (height - bandHeight) / 2, width, bandHeight);
 
   ctx.beginPath();
-  ctx.strokeStyle = rms > 0.22 ? "#b4323b" : "#147d73";
+  ctx.strokeStyle = rms > 0.22 ? "#b4323b" : "#1da7e8";
   ctx.lineWidth = 4;
   const slice = width / state.dataArray.length;
   for (let i = 0; i < state.dataArray.length; i += 1) {
@@ -295,8 +338,8 @@ async function saveSettings() {
   const hotkeyMode = el.modeSelect.value;
   const script = el.scriptSelect.value;
   const semanticCorrection = el.semanticToggle.checked;
-  const semanticIntentBackend = el.semanticBackendSelect.value || "rules";
   const modelProfile = el.modelSelect.value;
+  const appHome = el.appHomeInput.value.trim();
   el.hotkeyMessage.textContent = "保存中";
   setStatus("保存中", "busy");
   const response = await fetch("/api/settings", {
@@ -307,8 +350,8 @@ async function saveSettings() {
       hotkey_mode: hotkeyMode,
       script,
       semantic_correction_enabled: semanticCorrection,
-      semantic_intent_backend: semanticIntentBackend,
       model_profile: modelProfile,
+      app_home: appHome,
       restart: true,
     }),
   });
@@ -324,7 +367,8 @@ async function saveSettings() {
   el.modeSelect.value = payload.hotkey_mode;
   el.scriptSelect.value = payload.script;
   el.semanticToggle.checked = payload.semantic_correction_enabled !== false;
-  el.semanticBackendSelect.value = payload.semantic_intent_backend || "rules";
+  el.appHomeInput.value = payload.paths?.home || el.appHomeInput.value;
+  el.appHomeInput.disabled = Boolean(payload.paths?.env_locked);
   el.hotkeyMessage.textContent = payload.daemon_restarted ? "已保存并重启" : "已保存";
   setStatus("完成", "ready");
   await loadConfig();
@@ -332,7 +376,8 @@ async function saveSettings() {
 
 async function downloadSelectedModel() {
   const modelProfile = el.modelSelect.value;
-  el.hotkeyMessage.textContent = "下载中";
+  const model = selectedModel();
+  el.hotkeyMessage.textContent = `下载中：${model?.label || modelProfile}`;
   setStatus("下载中", "busy");
   const response = await fetch("/api/models/download", {
     method: "POST",
@@ -345,7 +390,93 @@ async function downloadSelectedModel() {
     setStatus("错误", "error");
     return;
   }
-  el.hotkeyMessage.textContent = `已下载：${payload.path}`;
+  renderDownloadStatus(payload);
+  startDownloadPolling();
+}
+
+async function pauseModelDownload() {
+  const response = await fetch("/api/models/download/pause", { method: "POST" });
+  const payload = await response.json();
+  renderDownloadStatus(payload);
+  el.hotkeyMessage.textContent = "已暂停，可继续下载";
+  setStatus("就绪", "ready");
+}
+
+function startDownloadPolling() {
+  if (state.downloadPoll) clearInterval(state.downloadPoll);
+  state.downloadPoll = setInterval(refreshDownloadStatus, 1000);
+}
+
+async function refreshDownloadStatus() {
+  const response = await fetch("/api/models/download/status");
+  const payload = await response.json();
+  renderDownloadStatus(payload);
+  if (!["downloading", "pausing"].includes(payload.status)) {
+    clearInterval(state.downloadPoll);
+    state.downloadPoll = null;
+    if (payload.status === "completed") {
+      el.hotkeyMessage.textContent = "模型下载完成";
+      setStatus("完成", "ready");
+      await loadConfig();
+    }
+    if (payload.status === "failed") {
+      el.hotkeyMessage.textContent = payload.error || "下载失败";
+      setStatus("错误", "error");
+    }
+  }
+}
+
+function renderDownloadStatus(payload = {}) {
+  const status = payload.status || "idle";
+  const done = Number(payload.bytes || 0);
+  const total = Number(payload.total_bytes || 0);
+  const fraction = total > 0 ? Math.min(1, done / total) : 0;
+  el.downloadProgress.style.width = `${Math.round(fraction * 100)}%`;
+  el.pauseDownloadBtn.disabled = status !== "downloading";
+  if (status === "idle") {
+    if (!selectedModel()?.model?.startsWith("bundled:")) el.downloadText.textContent = "未下载";
+    return;
+  }
+  const speed = Number(payload.speed_bps || 0);
+  let text = `${statusLabel(status)} · ${formatBytes(done)} / ${formatBytes(total)}`;
+  if (status === "downloading") text += ` · ${formatBytes(speed)}/s`;
+  if (payload.label) text = `${payload.label} · ${text}`;
+  if (payload.error) text += ` · ${payload.error}`;
+  el.downloadText.textContent = text;
+}
+
+async function validateLocalModel() {
+  await localModelAction("/api/models/validate-local", {});
+}
+
+async function importLocalModel(symlink) {
+  await localModelAction("/api/models/import-local", { symlink });
+  await loadConfig();
+}
+
+async function localModelAction(endpoint, extra) {
+  const modelProfile = el.modelSelect.value;
+  const path = el.localModelPath.value.trim();
+  if (!path) {
+    el.hotkeyMessage.textContent = "请输入本地模型目录";
+    return;
+  }
+  el.hotkeyMessage.textContent = "校验中";
+  setStatus("校验中", "busy");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model_profile: modelProfile, path, ...extra }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    el.hotkeyMessage.textContent = payload.error || "操作失败";
+    setStatus("错误", "error");
+    return;
+  }
+  el.hotkeyMessage.textContent = endpoint.includes("validate")
+    ? `校验通过：${payload.path}`
+    : `已导入：${payload.path}`;
   setStatus("完成", "ready");
 }
 
@@ -365,6 +496,11 @@ el.stopBtn.addEventListener("click", stopRecording);
 el.manualBtn.addEventListener("click", processManualText);
 el.saveHotkeyBtn.addEventListener("click", saveSettings);
 el.downloadModelBtn.addEventListener("click", downloadSelectedModel);
+el.pauseDownloadBtn.addEventListener("click", pauseModelDownload);
+el.modelSelect.addEventListener("change", renderModelSummary);
+el.validateLocalModelBtn.addEventListener("click", validateLocalModel);
+el.importLocalModelBtn.addEventListener("click", () => importLocalModel(false));
+el.linkLocalModelBtn.addEventListener("click", () => importLocalModel(true));
 el.copyRawBtn.addEventListener("click", () => copyText(el.rawText));
 el.copyProcessedBtn.addEventListener("click", () => copyText(el.processedText));
 

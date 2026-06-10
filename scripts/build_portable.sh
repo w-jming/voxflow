@@ -61,35 +61,15 @@ cat >"$APP_DIR/bin/voxflow-gui" <<'SH'
 #!/bin/sh
 set -eu
 APP_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-HOST="${VOXFLOW_HOST:-127.0.0.1}"
-PORT="${VOXFLOW_PORT:-8765}"
-URL="http://${HOST}:${PORT}"
-VOXFLOW_HOME="${VOXFLOW_HOME:-$HOME/.voxflow}"
-LOG_DIR="$VOXFLOW_HOME/logs"
-RUN_DIR="$VOXFLOW_HOME/run"
-mkdir -p "$LOG_DIR" "$RUN_DIR"
-export VOXFLOW_HOME PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
-
-if [ -f "$RUN_DIR/daemon.pid" ] && kill -0 "$(cat "$RUN_DIR/daemon.pid")" 2>/dev/null; then
-  :
-else
-  nohup "$APP_DIR/venv/bin/python" -m voxflow daemon >"$LOG_DIR/daemon.log" 2>&1 &
-  echo "$!" >"$RUN_DIR/daemon.pid"
+SITE_PACKAGES="$(find "$APP_DIR/venv/lib" -path '*/site-packages' -type d | head -n 1)"
+if [ -z "$SITE_PACKAGES" ]; then
+  echo "找不到 voxflow Python 包目录。" >&2
+  exit 1
 fi
-
-if [ -f "$RUN_DIR/gui.pid" ] && kill -0 "$(cat "$RUN_DIR/gui.pid")" 2>/dev/null; then
-  :
-else
-  nohup "$APP_DIR/venv/bin/python" -m voxflow gui --host "$HOST" --port "$PORT" >"$LOG_DIR/gui.log" 2>&1 &
-  echo "$!" >"$RUN_DIR/gui.pid"
-  sleep 1
-fi
-
-if command -v xdg-open >/dev/null 2>&1; then
-  xdg-open "$URL" >/dev/null 2>&1 || printf '%s\n' "$URL"
-else
-  printf '%s\n' "$URL"
-fi
+export PYTHONPATH="${SITE_PACKAGES}${PYTHONPATH:+:$PYTHONPATH}"
+export VOXFLOW_PYTHON="$APP_DIR/venv/bin/python"
+export PYTHONNOUSERSITE=1
+exec python3 -m voxflow.native_gui "$@"
 SH
 
 cat >"$APP_DIR/bin/voxflow-ibus-engine" <<'SH'

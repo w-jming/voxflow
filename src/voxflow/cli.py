@@ -38,6 +38,11 @@ def main(argv: list[str] | None = None) -> int:
 
         serve_gui(config, host=args.host, port=args.port, dry_run=args.dry_run)
         return 0
+    if args.command == "native-gui":
+        from .native_gui import main as native_gui_main
+
+        argv = ["--no-start-daemon"] if args.no_start_daemon else []
+        return native_gui_main(argv)
     if args.command == "daemon":
         config = load_config(args.config)
         apply_overrides(config, args)
@@ -121,6 +126,9 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument("--host", default="127.0.0.1")
     gui.add_argument("--port", type=int, default=8765)
     gui.add_argument("--dry-run", action="store_true", help="后端只记录输入动作，不实际输入")
+
+    native_gui = subparsers.add_parser("native-gui", help="启动 GTK 原生控制中心")
+    native_gui.add_argument("--no-start-daemon", action="store_true", help="打开窗口时不自动启动后台输入")
 
     daemon = subparsers.add_parser("daemon", help="启动后台语音输入服务和全局快捷键")
     add_common_options(daemon)

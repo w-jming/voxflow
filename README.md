@@ -1,6 +1,6 @@
 # 声流输入法 / VoxFlow Input
 
-VoxFlow 是 Linux 桌面中文/英文语音输入法。它提供桌面启动器、右上角控制图标、本地 Web 控制台、全局快捷键、自动标点、口语修正、简体/繁体输出设置和可切换 ASR 模型。
+VoxFlow 是 Linux 桌面中文/英文语音输入法。它提供原生 GTK 控制中心、桌面启动器、右上角控制图标、全局快捷键、自动标点、口语修正、简体/繁体输出设置和可切换 ASR 模型。
 
 ## 安装
 
@@ -16,7 +16,7 @@ sudo apt install ./dist/voxflow_0.2.0_amd64.deb
 voxflow-gui
 ```
 
-这个入口会启动后台输入服务、右上角图标和本地控制台。
+这个入口会打开原生桌面控制中心，并启动后台输入服务。
 
 也可以使用解压版安装到任意目录，例如 `/data/apps/voxflow`：
 
@@ -43,8 +43,11 @@ tar -xzf dist/voxflow-0.2.0_amd64.tar.gz -C /data/apps
 - 快捷键。
 - 录音模式：按键切换，或按住录音。
 - 输出字形：简体中文、繁体中文、模型原文。
-- 语义撤销识别：可开启或关闭，并显示当前可用/计划中的语义意图后端。
+- 智能撤销：规则状态机 + VoxFlow 注入账本，可开启或关闭。
 - 语音模型：内置轻量模型、Qwen3-ASR 0.6B、Qwen3-ASR 1.7B。
+- 模型下载进度、速度、暂停/继续。
+- 本地模型校验、复制导入、软链接导入。
+- 用户数据目录，默认 `~/.voxflow/`。
 
 右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录，以及退出 VoxFlow。退出 VoxFlow 会停止后台输入服务。
 
@@ -73,6 +76,8 @@ export VOXFLOW_HOME=/data/voxflow
 voxflow-gui
 ```
 
+也可以直接在控制中心的“数据目录”输入框中修改。若显式设置了 `VOXFLOW_HOME` 环境变量，环境变量优先，控制中心不会覆盖它。
+
 ## 系统输入法模式
 
 安装 deb 后会注册 IBus 引擎 `VoxFlow Input`。在 GNOME/KDE 的输入源设置里添加 VoxFlow 后，VoxFlow 可以作为系统输入法工作：
@@ -86,13 +91,13 @@ voxflow-gui
 
 ## 语义撤销
 
-VoxFlow 默认启用规则状态机 + 注入账本的语义撤销。设置里可以关闭该功能，关闭后“不是”“不对”“撤回”等都会按普通文本处理。
+VoxFlow 默认启用规则状态机 + 注入账本的智能撤销。设置里可以关闭该功能，关闭后“不是”“不对”“撤回”等都会按普通文本处理。
 
-语义意图后端采用可插拔设计：当前可用默认档是规则引擎；MiniLM/SetFit、Qwen3-Embedding 0.6B 分类头和低置信 LLM 仲裁在界面中作为计划后端展示，训练/安装前不可选择。任何后端都只能提出撤销建议，真正删除必须经过 VoxFlow 注入账本验证。
+语义意图后端采用可插拔设计，但软件界面只显示已经实现并可用的能力。MiniLM/SetFit、Qwen3-Embedding 0.6B 分类头和低置信 LLM 仲裁保留为源码和文档中的后续 TODO；未实现前不在控制中心显示。任何后端都只能提出撤销建议，真正删除必须经过 VoxFlow 注入账本验证。
 
 ## 模型
 
-源码仓库内置 `Systran/faster-whisper-tiny` 作为轻量 fallback，许可证为 MIT，支持中文和英文在内的多语言输入。更高准确率模型可在控制台点击“下载”，也可以用命令行下载并切换：
+源码仓库内置 `Systran/faster-whisper-tiny` 作为轻量 fallback，许可证为 MIT，支持中文和英文在内的多语言输入。更高准确率模型可在控制中心点击“下载/继续”，也可以用命令行下载并切换：
 
 ```bash
 voxflow models
@@ -102,7 +107,7 @@ voxflow models --download qwen3-asr-1.7b
 voxflow models --select qwen3-asr-1.7b
 ```
 
-Qwen3-ASR 0.6B/1.7B 使用官方 Hugging Face 模型仓库，许可证为 Apache-2.0。deb 默认不打包这些大模型；点击控制台“下载”或运行 `voxflow models --download ...` 后，模型会进入 `~/.voxflow/models/` 或 `$VOXFLOW_HOME/models/`。
+Qwen3-ASR 0.6B/1.7B 使用官方 Hugging Face 模型仓库，许可证为 Apache-2.0。deb 默认不打包这些大模型；点击控制中心“下载/继续”或运行 `voxflow models --download ...` 后，模型会进入 `~/.voxflow/models/` 或 `$VOXFLOW_HOME/models/`。控制中心会显示下载目标、进度、速度，并支持暂停后继续。
 
 如果本机已经有 Qwen3-ASR 权重，可以先校验它是否为 VoxFlow 支持的官方权重：
 

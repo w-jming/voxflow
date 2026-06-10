@@ -6,7 +6,9 @@
 ## 结果摘要
 
 - Python 编译检查通过：`python3 -m compileall src tests`。
-- Python 单元测试通过：`46 passed, 1 warning`。
+- Python 单元测试通过：`49 passed, 1 warning`。
+- Web 调试页 JavaScript 语法检查通过：`node --check src/voxflow/web/app.js`。
+- GTK 原生控制中心 smoke test 通过：窗口可在当前 X11 会话打开并自动关闭。
 - 本机已有 Qwen3-ASR 1.7B 权重通过 VoxFlow 导入前校验：官方 revision `7278e1e70fe206f11671096ffdd38061171dd6e5`，检查 10 个关键文件，并对两个 safetensors 分片做 SHA256 比对。
 - deb 构建通过：`dist/voxflow_0.2.0_amd64.deb`，约 152 MB；默认不包含 Qwen3-ASR 大模型或 `/opt/voxflow/models`。
 - portable tar 构建通过：`dist/voxflow-0.2.0_amd64.tar.gz`，约 187 MB；可解压到任意目录运行。
@@ -15,7 +17,7 @@
 - `VOXFLOW_HOME` 验证通过：模型、配置、日志、pid、缓存路径默认在 `~/.voxflow`，测试中可改到 `/tmp/...`。
 - 本地 Qwen 权重复用验证通过：`--import-model ... --symlink` 写入用户配置，实际权重仍指向既有目录，没有复制或删除已有下载。
 - portable 解压包验证通过：`doctor`、本地 Qwen 软链接导入、IBus dry-run。
-- GUI smoke test 通过：`/logo.svg` 返回 `image/svg+xml`，`/api/config` 暴露新的用户数据目录。
+- Web 调试控制台 smoke test 通过：`/logo.svg` 返回 `image/svg+xml`，`/api/config` 暴露新的用户数据目录。
 
 ## 自动化测试
 
@@ -27,7 +29,7 @@ python3 -m compileall src tests
 结果：
 
 ```text
-46 passed, 1 warning in 0.09s
+49 passed, 1 warning in 0.10s
 ```
 
 覆盖重点：
@@ -36,9 +38,10 @@ python3 -m compileall src tests
 - `toggle` / `hold` 快捷键状态机和用户快捷键配置。
 - 语义撤销开关、“不是不对”等误触发边界。
 - VoxFlow 注入账本只删除自己提交过的文本。
-- 模型档位、模型导入校验、语义意图后端注册和许可证元数据。
+- 模型档位、模型下载进度统计、模型导入校验、语义意图后端注册和许可证元数据。
 - 录音 fallback、通知容错、输入注入 dry-run、版本一致性。
 - `VOXFLOW_HOME` 下的配置、模型、日志和运行状态路径。
+- `~/.config/voxflow/home` 数据目录指针。
 
 ## 模型校验
 
@@ -118,6 +121,7 @@ Replaces: local-speak-input
 包内容检查确认：
 
 - 包含 `/usr/bin/voxflow`、`voxflow-gui`、`voxflow-daemon`、`voxflow-tray`、`voxflow-ibus-engine`。
+- `voxflow-gui` 默认打开 GTK 原生控制中心；`voxflow gui` 保留为 Web 调试控制台。
 - 包含 IBus component、桌面入口、SVG 图标和内置 `faster-whisper-tiny` fallback。
 - 不包含 Qwen3-ASR safetensors 分片。
 - 不包含 `/opt/voxflow/models`。
@@ -138,6 +142,32 @@ Conf voxflow (0.2.0 local-deb [amd64])
 ```
 
 ## 运行验证
+
+GTK 原生控制中心：
+
+```bash
+PYTHONPATH=src python3 - <<'PY'
+from voxflow.native_gui import GLib, Gtk, VoxFlowWindow
+window = VoxFlowWindow(start_daemon_on_open=False)
+window.show_all()
+GLib.timeout_add(500, Gtk.main_quit)
+Gtk.main()
+window.destroy()
+print('native_gui_window_smoke_ok')
+PY
+```
+
+结果：
+
+```text
+native_gui_window_smoke_ok
+```
+
+Web 调试页：
+
+```bash
+node --check src/voxflow/web/app.js
+```
 
 staged rootfs：
 
@@ -171,7 +201,7 @@ VOXFLOW_HOME=/tmp/voxflow-portable-test/home \
 
 以上命令通过，portable 包可以在解压目录运行，并可把用户数据放到自定义 `VOXFLOW_HOME`。
 
-GUI smoke test：
+Web 调试控制台 smoke test：
 
 ```bash
 VOXFLOW_HOME=/tmp/voxflow-gui-smoke \

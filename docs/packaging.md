@@ -3,7 +3,7 @@
 VoxFlow deb 包面向 Ubuntu/Debian amd64 桌面环境，安装后提供：
 
 - `/usr/bin/voxflow` 命令行入口。
-- `/usr/bin/voxflow-gui` 桌面控制台入口。
+- `/usr/bin/voxflow-gui` GTK 原生控制中心入口。
 - `/usr/bin/voxflow-daemon` 后台快捷键输入入口。
 - `/usr/bin/voxflow-tray` 右上角控制图标入口。
 - `/opt/voxflow/venv` 内置 Python 运行环境和 Python 依赖。
@@ -62,7 +62,7 @@ voxflow doctor
 voxflow-gui
 ```
 
-应用菜单入口会自动启动 GUI、后台 daemon 和右上角控制图标。默认快捷键是 `Ctrl+Space`，默认录音模式是按一次开始、再按一次停止。
+应用菜单入口会打开 GTK 原生控制中心，并自动启动后台 daemon。默认快捷键是 `Ctrl+Space`，默认录音模式是按一次开始、再按一次停止。
 
 解压版安装到任意目录：
 
@@ -72,6 +72,8 @@ tar -xzf dist/voxflow-0.2.0_amd64.tar.gz -C /data/apps
 /data/apps/voxflow-0.2.0/bin/voxflow doctor
 /data/apps/voxflow-0.2.0/bin/voxflow-gui
 ```
+
+解压版仍依赖系统提供 GTK/PyGObject、IBus 和音频/输入工具；Ubuntu 上如果缺失，可安装 deb 依赖中列出的系统包，或优先使用 deb 安装方式。
 
 解压版可选安装用户级桌面入口和 IBus component：
 
@@ -104,7 +106,7 @@ export VOXFLOW_HOME=/data/voxflow
 
 配置加载顺序：内置默认值 -> 系统配置 -> 旧版 `~/.config/voxflow/config.toml` -> 新版 `$VOXFLOW_HOME/config.toml` -> CLI 参数。
 
-控制台会写入用户级配置，保存快捷键、录音模式、输出字形和模型选择，并在后台服务运行时自动重启 daemon。
+控制中心会写入用户级配置，保存快捷键、录音模式、输出字形、智能撤销、模型选择和用户数据目录，并在后台服务运行时自动重启 daemon。没有显式 `VOXFLOW_HOME` 环境变量时，控制中心的数据目录设置会写入 `~/.config/voxflow/home` 指针文件。
 
 ## 复用已有模型
 

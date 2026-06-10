@@ -23,7 +23,7 @@ voxflow models --download qwen3-asr-1.7b
 voxflow models --select qwen3-asr-1.7b
 ```
 
-控制台也提供模型下拉选择和下载按钮。
+控制中心提供模型下拉选择、下载/继续、暂停、本地模型校验、复制导入和软链接导入。
 
 ## 为什么源码内置 tiny
 

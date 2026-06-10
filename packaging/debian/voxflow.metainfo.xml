@@ -16,8 +16,8 @@
   </categories>
   <content_rating type="oars-1.1" />
   <description>
-    <p>VoxFlow Input provides a local web console, desktop launcher, top-bar indicator, configurable background hotkey daemon, and command-line tools for Chinese and English speech input on Linux.</p>
-    <p xml:lang="zh-CN">声流输入法提供本地可视化控制台、桌面入口、右上角控制图标、可自定义快捷键的后台服务和命令行工具，用于在 Linux 上进行中文/英文语音输入。</p>
+    <p>VoxFlow Input provides a native GTK control center, desktop launcher, top-bar indicator, configurable background hotkey daemon, and command-line tools for Chinese and English speech input on Linux.</p>
+    <p xml:lang="zh-CN">声流输入法提供 GTK 原生控制中心、桌面入口、右上角控制图标、可自定义快捷键的后台服务和命令行工具，用于在 Linux 上进行中文/英文语音输入。</p>
   </description>
   <icon type="stock">voxflow</icon>
   <url type="homepage">https://github.com/w-jming/voxflow</url>
