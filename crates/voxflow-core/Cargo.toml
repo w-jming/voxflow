@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+# Real-mic dictation smoke (asr-live); needs libpipewire dev files to build.
+live-asr = ["voxflow-audio/pipewire-native"]
+
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
@@ -26,3 +30,8 @@ voxflow-asr-volcano.workspace = true
 voxflow-audio.workspace = true
 voxflow-input.workspace = true
 voxflow-ipc.workspace = true
+
+[[bin]]
+name = "asr-live"
+path = "src/bin/asr_live.rs"
+required-features = ["live-asr"]
