@@ -33,6 +33,7 @@
 | VF-ARCH-06 | [语义意图分类器](architecture/semantic-intent-classifier.md) | 评审中(待冻结) | 资源预算、标签、数据集、发布门 |
 | VF-ARCH-07 | [模型管理](architecture/model-management.md) | 评审中(待冻结) | profile/manifest、下载续传、导入校验、切换回滚 |
 | VF-ARCH-08 | [IPC API 合同](architecture/ipc-api.md) | 评审中(待冻结) | 封皮、命令/事件目录、错误码表、兼容性规则 |
+| VF-ARCH-09 | [模型调研 2026](architecture/model-research-2026.md) | 调研报告 | 2026 最新 ASR 模型全网调研与选型建议(GPU 优先,D-21) |
 | **设计** | | | |
 | VF-DSN-01 | [品牌视觉](design/brand-visual.md) | 评审中(待冻结) | 品牌、色板(主题色不变)、Logo 规则与尺寸 |
 | VF-DSN-02 | [UI 系统](design/ui-system.md) | 评审中(待冻结) | 全量设计 token(色彩/字号/阴影/动效/层级)、组件、可访问性 |

@@ -63,6 +63,12 @@ mock 链路已就绪,这一步只差真实环境,且能提前暴露 zbus 信号�
 - [ ] HUD 状态指示器窗口:X11 定位/置顶 → gtk-layer-shell POC(KDE/wlroots)→ GNOME Wayland 托盘降级;🧑 三种环境各人工走查一次。
 - [ ] 🧑 所有者走查批次 2:总览连接 + 模型页全流程(命令见阶段记录);确认后删除批次 1 静态原型。
 
+### GPU 优先与 2026 模型(D-21,2026-06-11 新增;调研见 `docs/redesign/architecture/model-research-2026.md`)
+
+- [ ] sherpa-onnx CUDA EP 接入调研(sherpa-rs `cuda` feature 与 GPU 预编译库分发),P0 zipformer 链路 GPU 加速实测。
+- [ ] Qwen3-ASR-0.6B int8(sherpa-onnx 离线+VAD 包 2026-03-25)接入 `voxflow-asr-sherpa` 离线识别器封装 → final/refine 流水线(D-9 升级);新增模型 profile。
+- [ ] Qwen3-ASR-1.7B + vLLM 本地 sidecar POC(真流式,RTX 5070 Ti):延迟/显存/启动实测,决定是否进"高准确率流式模式"。
+
 ### 后续(依赖前三条主线的产出)
 
 - [ ] 阶段 5 收尾:🧑 合成数据集抽样复核(≥10%)→ 按 D-18 训练 LR/SVM 头 + ONNX 导出 → ort 接入 → 发布门指标记录;修正事件接入真实 ASR 流水线;控制台语义修正页。

@@ -71,12 +71,12 @@ POC 实测项:首 partial 延迟、RTF、内存峰值已回填;**中英混说 CE
 
 ### 5.2 高准确率模型(P1)
 
-Qwen3-ASR 0.6B/1.7B 作为高准确率候选。其官方运行时当前没有稳定的 token streaming API,因此**不承诺**它作为实时主模型,只用作:
+**2026-06-11 更新(详见[模型调研 2026](model-research-2026.md),D-21 GPU 优先)**:Qwen3-ASR 0.6B/1.7B 已于 2026-01-29 开源(Apache-2.0,30 语言 + 22 中文方言,开源 SOTA;1.7B zh WER 2.41/2.71),原"无稳定 streaming API"前提失效。分两条路接入:
 
-- 停顿后的 final/refine 模型(异步,不阻塞输入)。
-- 用户主动选择的高质量离线转写模式。
+- **final/refine(立即可做)**:Qwen3-ASR-0.6B int8 经 sherpa-onnx **离线识别器 + VAD 切段**(官方模型包 2026-03-25),停顿后异步精修 final segment,经账本安全门替换;CUDA EP 优先,CPU 兜底。
+- **高准确率流式模式(P1 POC)**:Qwen3-ASR-1.7B 的真流式仅在官方 vLLM 后端(GPU);作为本地 sidecar 服务 POC,实测延迟/显存/启动成本后决定是否作为设置页可选模式。**不替代** zipformer 默认链路(轻量即用分层,PRD §3)。
 
-若官方后续提供可靠 streaming API,经 POC 验证后可升级为主流式后端(D-9)。
+备选 refine:FireRedASR2S(小红书 2026-02 开源,中英混读 + 字级时间戳/置信度)。
 
 ### 5.3 双模型级联(P1)
 
