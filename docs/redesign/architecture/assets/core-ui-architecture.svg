@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">VoxFlow Core UI architecture</title>
+  <desc id="desc">Rust Core, Tauri UI, input method frontend, streaming ASR and semantic classifier.</desc>
+  <rect width="1200" height="720" fill="#F8FAFC"/>
+  <text x="48" y="58" fill="#0F172A" font-family="Arial, sans-serif" font-size="30" font-weight="700">VoxFlow 下一代架构</text>
+  <text x="48" y="90" fill="#475569" font-family="Arial, sans-serif" font-size="16">Rust Core + Tauri UI + 输入法前端，Core 是唯一状态源</text>
+
+  <g font-family="Arial, sans-serif">
+    <rect x="64" y="142" width="280" height="122" rx="12" fill="#FFFFFF" stroke="#D7E7F2" stroke-width="2"/>
+    <text x="94" y="184" fill="#0F172A" font-size="22" font-weight="700">Tauri Control Center</text>
+    <text x="94" y="218" fill="#475569" font-size="16">设置、模型、诊断、托盘</text>
+
+    <rect x="460" y="132" width="330" height="456" rx="14" fill="#FFFFFF" stroke="#0EA5E9" stroke-width="3"/>
+    <text x="500" y="176" fill="#0F172A" font-size="24" font-weight="700">voxflow-core</text>
+    <text x="500" y="206" fill="#475569" font-size="16">Rust daemon</text>
+    <rect x="500" y="238" width="246" height="40" rx="8" fill="#E0F2FE"/>
+    <text x="522" y="264" fill="#0369A1" font-size="16">Audio capture + VAD</text>
+    <rect x="500" y="294" width="246" height="40" rx="8" fill="#E0F2FE"/>
+    <text x="522" y="320" fill="#0369A1" font-size="16">Streaming ASR</text>
+    <rect x="500" y="350" width="246" height="40" rx="8" fill="#E0F2FE"/>
+    <text x="522" y="376" fill="#0369A1" font-size="16">Light intent classifier</text>
+    <rect x="500" y="406" width="246" height="40" rx="8" fill="#E0F2FE"/>
+    <text x="522" y="432" fill="#0369A1" font-size="16">Semantic safety gate</text>
+    <rect x="500" y="462" width="246" height="40" rx="8" fill="#E0F2FE"/>
+    <text x="522" y="488" fill="#0369A1" font-size="16">Ledger + config + logs</text>
+    <rect x="500" y="518" width="246" height="40" rx="8" fill="#E0F2FE"/>
+    <text x="522" y="544" fill="#0369A1" font-size="16">Model manager</text>
+
+    <rect x="872" y="142" width="260" height="122" rx="12" fill="#FFFFFF" stroke="#D7E7F2" stroke-width="2"/>
+    <text x="902" y="184" fill="#0F172A" font-size="22" font-weight="700">Input Frontend</text>
+    <text x="902" y="218" fill="#475569" font-size="16">IBus / Fcitx5 / IMK / TSF</text>
+
+    <rect x="872" y="356" width="260" height="122" rx="12" fill="#FFFFFF" stroke="#D7E7F2" stroke-width="2"/>
+    <text x="902" y="398" fill="#0F172A" font-size="22" font-weight="700">Target App</text>
+    <text x="902" y="432" fill="#475569" font-size="16">preedit / commit / delete</text>
+
+    <rect x="64" y="356" width="280" height="122" rx="12" fill="#FFFFFF" stroke="#D7E7F2" stroke-width="2"/>
+    <text x="94" y="398" fill="#0F172A" font-size="22" font-weight="700">Model Store</text>
+    <text x="94" y="432" fill="#475569" font-size="16">~/.voxflow/models</text>
+
+    <path d="M344 203h96" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M428 191l18 12-18 12" fill="none" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="362" y="190" fill="#475569" font-size="14">IPC</text>
+
+    <path d="M790 203h62" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M840 191l18 12-18 12" fill="none" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="798" y="190" fill="#475569" font-size="14">events</text>
+
+    <path d="M1002 264v72" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M990 324l12 18 12-18" fill="none" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M344 417h96" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round"/>
+    <path d="M428 405l18 12-18 12" fill="none" stroke="#0EA5E9" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="358" y="404" fill="#475569" font-size="14">models</text>
+  </g>
+</svg>
+

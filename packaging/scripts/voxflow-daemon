@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-export PYTHONNOUSERSITE=1
-exec /opt/voxflow/venv/bin/python -m voxflow daemon "$@"

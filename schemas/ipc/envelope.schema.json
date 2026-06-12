@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voxflow.local/schema/ipc/envelope.schema.json",
+  "title": "VoxFlow IPC Envelope",
+  "type": "object",
+  "required": ["version", "kind", "name", "payload"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "id": { "type": "string" },
+    "kind": {
+      "type": "string",
+      "enum": ["command", "response", "event", "error"]
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object" },
+    "code": { "type": "string" },
+    "message": { "type": "string" },
+    "recoverable": { "type": "boolean" },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": true
+}

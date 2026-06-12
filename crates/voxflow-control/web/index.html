@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>VoxFlow 控制台</title>
+    <script>
+      const storedTheme = localStorage.getItem("voxflow-theme") || "system";
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = storedTheme === "system" ? (prefersDark ? "dark" : "light") : storedTheme;
+    </script>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
+
