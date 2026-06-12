@@ -59,6 +59,7 @@ mock 链路已就绪,这一步只差真实环境,且能提前暴露 zbus 信号�
 - [x] React 18 + Vite + Zustand 前端:总览页 + **模型管理页**(多模型一键下载 + 实时进度/暂停/取消、激活、删除、本地导入校验);其余 6 页骨架。
 - [x] core 侧 `model.download/pause/resume/cancel` + `model.progress`(HF 按文件下载、Range 续传、sha256、原子安装);3 个 HF profile(双语 2023 推荐 / 中文 2025 SOTA / 中文 xlarge 2025);真网端到端实测通过(streaming-zh-2025 167MB)。
 - [ ] 🆕 **所有者体验反馈(2026-06-12,优先)**:① 控制中心更新/重启不得"闪退"——需要平滑升级路径(single-instance + 窗口状态保留;开发期 agent 替换二进制时改为提示用户重启,而非直接 kill);② 连接体验优化——启动即渲染骨架屏,连接中给出进度反馈,缩短首连/重连等待(当前退避 500ms 起步,可对首次连接做更密集重试),断线横幅含重试倒计时。
+- [ ] 🆕 **所有者反馈(2026-06-12):模型管理页纳入 Qwen 系列模型并优化展示形式**。① 内容:把 Qwen3-ASR-1.7B(vLLM 默认后端,权重现走 HF 缓存、对模型管理器不可见)与 Qwen3-ASR-0.6B(精修层,D-21)纳入统一 profile 体系——扩展 profile schema 支持 `backend = qwen3_vllm` 类目(HF safetensors 文件清单 + sha256),使下载/校验/删除/占用显示与 zipformer 同一套管理链路;显示驻留状态(已下载/已加载/显存占用)。② 展示:单页平铺改为分组/多页形式——按用途分组(实时流式 / 精修 / 云端 API)或分页签,并与「输入」页后端选择联动标注"当前后端使用中";体积/语言/推荐标签做视觉分层(规格按 control-center-spec 演进)。
 - [ ] 其余 5 页实化(语义修正/音频/外观/诊断/关于,规格见 control-center-spec;输入页已含后端切换)。
 - [ ] tray、single-instance、退出语义(UJ-09 三层)、原生文件选择器(tauri-plugin-dialog)。
 - [ ] HUD 状态指示器窗口:X11 定位/置顶 → gtk-layer-shell POC(KDE/wlroots)→ GNOME Wayland 托盘降级;🧑 三种环境各人工走查一次。
