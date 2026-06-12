@@ -22,14 +22,22 @@ scripts/deploy-local.sh); nothing is fetched at dictation time.
 
 import base64
 import json
+import os
 import sys
 
 import numpy as np
 
+# vLLM and its dependencies write progress/logs to stdout, which would corrupt
+# the JSONL protocol. Keep a private duplicate of the original stdout for
+# protocol replies and point fd 1 at stderr so even C-level writes are safe.
+_PROTOCOL_OUT = os.fdopen(os.dup(1), "w", buffering=1)
+os.dup2(2, 1)
+sys.stdout = sys.stderr
+
 
 def reply(obj):
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    sys.stdout.flush()
+    _PROTOCOL_OUT.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    _PROTOCOL_OUT.flush()
 
 
 def main():
@@ -59,6 +67,7 @@ def main():
                         msg.get("gpu_memory_utilization", 0.8)
                     ),
                     max_new_tokens=int(msg.get("max_new_tokens", 32)),
+                    max_model_len=int(msg.get("max_model_len", 16384)),
                 )
                 reply({"event": "ready"})
             except Exception as err:  # noqa: BLE001 — report anything to Rust
