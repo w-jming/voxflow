@@ -153,6 +153,7 @@ pub fn sample_status_snapshot() -> StatusSnapshot {
             bluetooth_profile: None,
         },
         models: ModelInfo {
+            asr_backend: Some("mock".to_string()),
             active_asr: "streaming-zh-en-small".to_string(),
             active_refiner: None,
             intent_classifier: IntentClassifierInfo {

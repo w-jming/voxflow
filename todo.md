@@ -63,6 +63,15 @@ mock 链路已就绪,这一步只差真实环境,且能提前暴露 zbus 信号�
 - [ ] HUD 状态指示器窗口:X11 定位/置顶 → gtk-layer-shell POC(KDE/wlroots)→ GNOME Wayland 托盘降级;🧑 三种环境各人工走查一次。
 - [ ] 🧑 所有者走查批次 2:总览连接 + 模型页全流程(命令见阶段记录);确认后删除批次 1 静态原型。
 
+### D-22 后端切换(2026-06-11 实现)
+
+- [x] `config.asr.backend`:qwen3_vllm(默认)/ volcano_api / zipformer_local / mock;dictation.start 时按配置构建识别器。
+- [x] `voxflow-asr-qwen3`:官方 qwen-asr[vllm] 流式 API 经 Python sidecar(JSONL stdio);`voxflow-asr-volcano`:火山 wss 二进制协议(协议帧/映射均有离线 UT)。
+- [x] 控制中心「输入」页:后端切换 + 火山密钥配置(仅存本机)。
+- [x] `scripts/deploy-local.sh` → `~/software/voxflow`(uv venv + qwen-asr[vllm] + 1.7B 权重预下载)。
+- [ ] 🧑 真机测试:Qwen3 sidecar 首次加载与流式听写;火山 API 需所有者密钥实测(协议按公开文档实现,**未经真实服务验证**)。
+- [ ] core 流水线真实音频泵接入(dictation.start 后 PipeWire→VAD→recognizer 持续推流;当前 IPC 层已按后端构建识别器,但听写音频循环仍待接)。
+
 ### GPU 优先与 2026 模型(D-21,2026-06-11 新增;调研见 `docs/redesign/architecture/model-research-2026.md`)
 
 - [ ] sherpa-onnx CUDA EP 接入调研(sherpa-rs `cuda` feature 与 GPU 预编译库分发),P0 zipformer 链路 GPU 加速实测。

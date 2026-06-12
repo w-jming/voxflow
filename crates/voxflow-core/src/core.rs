@@ -30,7 +30,6 @@ pub struct CommandOutcome {
     pub shutdown: bool,
 }
 
-#[derive(Debug)]
 pub struct VoxflowCore {
     paths: VoxflowPaths,
     config: Config,
@@ -42,7 +41,8 @@ pub struct VoxflowCore {
     frontend_state: FrontendState,
     frontend_capabilities: Vec<String>,
     frontend_surrounding_tail: Option<String>,
-    recognizer: MockRecognizer,
+    recognizer: Box<dyn StreamingRecognizer>,
+    recognizer_backend: Option<crate::config::AsrBackend>,
     correction_ledger: InjectionLedger,
     correction_classifier: RuleIntentClassifier,
     correction_gate: SafetyGate,
@@ -67,7 +67,8 @@ impl VoxflowCore {
             frontend_state: FrontendState::NotInstalled,
             frontend_capabilities: Vec::new(),
             frontend_surrounding_tail: None,
-            recognizer: MockRecognizer::default(),
+            recognizer: Box::new(MockRecognizer::default()),
+            recognizer_backend: None,
             correction_ledger: InjectionLedger::default(),
             correction_classifier: RuleIntentClassifier,
             correction_gate: SafetyGate,
@@ -96,7 +97,8 @@ impl VoxflowCore {
             frontend_state: FrontendState::NotInstalled,
             frontend_capabilities: Vec::new(),
             frontend_surrounding_tail: None,
-            recognizer: MockRecognizer::default(),
+            recognizer: Box::new(MockRecognizer::default()),
+            recognizer_backend: None,
             correction_ledger: InjectionLedger::default(),
             correction_classifier: RuleIntentClassifier,
             correction_gate: SafetyGate,
@@ -108,7 +110,20 @@ impl VoxflowCore {
     }
 
     pub fn set_mock_script(&mut self, script: Vec<AsrEvent>) {
-        self.recognizer = MockRecognizer::with_script(script);
+        self.config.asr.backend = crate::config::AsrBackend::Mock;
+        self.recognizer = Box::new(MockRecognizer::with_script(script));
+        self.recognizer_backend = Some(crate::config::AsrBackend::Mock);
+    }
+
+    /// Rebuilds the recognizer when the configured backend changed (D-22).
+    fn ensure_recognizer(&mut self) -> anyhow::Result<()> {
+        let desired = self.config.asr.backend;
+        if self.recognizer_backend == Some(desired) {
+            return Ok(());
+        }
+        self.recognizer = crate::backend::build_recognizer(&self.config, &self.paths)?;
+        self.recognizer_backend = Some(desired);
+        Ok(())
     }
 
     pub fn status_snapshot(&self) -> StatusSnapshot {
@@ -129,6 +144,9 @@ impl VoxflowCore {
             },
             audio: self.audio_info(),
             models: ModelInfo {
+                asr_backend: Some(
+                    crate::backend::backend_label(self.config.asr.backend).to_string(),
+                ),
                 active_asr: self.config.models.active_asr.clone(),
                 active_refiner: self.config.models.active_refiner.clone(),
                 intent_classifier: IntentClassifierInfo {
@@ -544,6 +562,16 @@ impl VoxflowCore {
     }
 
     fn dictation_start(&mut self, request: Envelope) -> CommandOutcome {
+        if let Err(error) = self.ensure_recognizer() {
+            self.dictation_state = DictationState::Error;
+            return self.error(
+                request,
+                "dictation.model_unavailable",
+                format!("asr backend unavailable: {error}"),
+                true,
+                json!({ "backend": crate::backend::backend_label(self.config.asr.backend) }),
+            );
+        }
         self.dictation_state = DictationState::Listening;
         let session = match self.recognizer.start_session() {
             Ok(session) => session,
@@ -552,7 +580,7 @@ impl VoxflowCore {
                 return self.error(
                     request,
                     "dictation.model_unavailable",
-                    format!("mock recognizer failed: {error}"),
+                    format!("recognizer failed to start session: {error}"),
                     true,
                     json!({}),
                 );

@@ -769,6 +769,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-encoding"
+version = "2.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
+
+[[package]]
 name = "dbus"
 version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4304,6 +4310,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand",
+ "rustls",
+ "rustls-pki-types",
+ "sha1",
+ "thiserror 1.0.69",
+ "utf-8",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4504,6 +4531,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "voxflow-asr-qwen3"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "tracing",
+ "voxflow-asr",
+]
+
+[[package]]
 name = "voxflow-asr-sherpa"
 version = "0.3.0"
 dependencies = [
@@ -4515,6 +4554,19 @@ dependencies = [
  "tracing",
  "voxflow-asr",
  "voxflow-audio",
+]
+
+[[package]]
+name = "voxflow-asr-volcano"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "flate2",
+ "serde",
+ "serde_json",
+ "tracing",
+ "tungstenite",
+ "voxflow-asr",
 ]
 
 [[package]]
@@ -4570,6 +4622,9 @@ dependencies = [
  "tracing-subscriber",
  "ureq",
  "voxflow-asr",
+ "voxflow-asr-qwen3",
+ "voxflow-asr-sherpa",
+ "voxflow-asr-volcano",
  "voxflow-audio",
  "voxflow-input",
  "voxflow-ipc",
@@ -4902,7 +4957,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -3,7 +3,9 @@ resolver = "2"
 members = [
   "apps/control-center/src-tauri",
   "crates/voxflow-asr",
+  "crates/voxflow-asr-qwen3",
   "crates/voxflow-asr-sherpa",
+  "crates/voxflow-asr-volcano",
   "crates/voxflow-audio",
   "crates/voxflow-core",
   "crates/voxflow-control",
@@ -37,7 +39,9 @@ voxflow-ipc = { path = "crates/voxflow-ipc" }
 voxflow-input = { path = "crates/voxflow-input" }
 voxflow-fcitx5 = { path = "crates/voxflow-fcitx5" }
 voxflow-asr = { path = "crates/voxflow-asr" }
+voxflow-asr-qwen3 = { path = "crates/voxflow-asr-qwen3" }
 voxflow-asr-sherpa = { path = "crates/voxflow-asr-sherpa" }
+voxflow-asr-volcano = { path = "crates/voxflow-asr-volcano" }
 voxflow-audio = { path = "crates/voxflow-audio" }
 voxflow-semantic = { path = "crates/voxflow-semantic" }
 voxflow-control = { path = "crates/voxflow-control" }
