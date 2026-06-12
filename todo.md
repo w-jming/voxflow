@@ -70,7 +70,8 @@ mock 链路已就绪,这一步只差真实环境,且能提前暴露 zbus 信号�
 - [x] `voxflow-asr-qwen3`:官方 qwen-asr[vllm] 流式 API 经 Python sidecar(JSONL stdio);`voxflow-asr-volcano`:火山 wss 二进制协议(协议帧/映射均有离线 UT)。
 - [x] 控制中心「输入」页:后端切换 + 火山密钥配置(仅存本机)。
 - [x] `scripts/deploy-local.sh` → `~/software/voxflow`(uv venv + qwen-asr[vllm] + 1.7B 权重预下载)。
-- [ ] 🧑 真机测试:Qwen3 sidecar 首次加载与流式听写;火山 API 需所有者密钥实测(协议按公开文档实现,**未经真实服务验证**)。
+- [ ] 🧑 真机测试:Qwen3 sidecar 首次加载与流式听写。
+- [ ] ⚠️ **火山 API 完全未经真实服务测试(2026-06-12 标注:暂不具备测试条件,无可用密钥)**——协议按公开文档+参考实现编写,仅离线单测;获得密钥后必须先跑 `asr-live --backend volcano_api` 实测再视为可用,并同步更新 review-and-decisions D-22 与部署 README 的标注。
 - [ ] core 流水线真实音频泵接入(dictation.start 后 PipeWire→VAD→recognizer 持续推流;当前 IPC 层已按后端构建识别器,但听写音频循环仍待接)。
 
 ### GPU 优先与 2026 模型(D-21,2026-06-11 新增;调研见 `docs/redesign/architecture/model-research-2026.md`)
