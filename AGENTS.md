@@ -71,6 +71,7 @@ VoxFlow / 声流输入法下一代版本是 Linux 优先、后续跨平台的本
 - 2026-06-06:`OpenFit by Shokz` 蓝牙耳机默认 `a2dp-sink` 只提供输出;切到 `headset-head-unit-msbc` 后 PipeWire 出现 `bluez_input.A8_F5_E1_AF_A0_C1.0`,并成功录制 16-bit mono 16000 Hz。
 - 当前系统经验:有 `xdotool`、`xclip`、`pw-record`;旧 Python 版曾因缺 `libportaudio2` 让 `sounddevice` 不可用。新版主链路必须用 PipeWire native,这些只作为诊断/兼容参考。
 - 2026-06-10:旧版 `voxflow` 与 `local-speak-input` 已从本机卸载,用户数据、Qwen 缓存、旧 build/dist/downloads 已清理;源码仓库与 `.venv/` 保留。
+- 2026-06-11:本机 GPU 为 NVIDIA RTX 5070 Ti 16GB(驱动 580.159 / CUDA 13.0,未装 nvcc toolkit);所有者裁决 GPU 优先运行(D-21),CPU-only 仍须可用。
 
 ## 工具链与构建环境(2026-06-11 起)
 
