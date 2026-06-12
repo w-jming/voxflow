@@ -24,7 +24,11 @@ fn test_core() -> VoxflowCore {
         runtime_dir: "/tmp/voxflow-core-test/run/voxflow".into(),
         socket: "/tmp/voxflow-core-test/run/voxflow/core.sock".into(),
     };
-    VoxflowCore::with_config(paths, Config::default())
+    VoxflowCore::with_config(paths, {
+        let mut config = Config::default();
+        config.asr.backend = voxflow_core::config::AsrBackend::Mock;
+        config
+    })
 }
 
 fn test_core_with_home(home: std::path::PathBuf) -> VoxflowCore {
@@ -39,7 +43,11 @@ fn test_core_with_home(home: std::path::PathBuf) -> VoxflowCore {
         socket: home.join("run").join("voxflow").join("core.sock"),
         home,
     };
-    VoxflowCore::with_config(paths, Config::default())
+    VoxflowCore::with_config(paths, {
+        let mut config = Config::default();
+        config.asr.backend = voxflow_core::config::AsrBackend::Mock;
+        config
+    })
 }
 
 fn unique_temp_dir(name: &str) -> std::path::PathBuf {

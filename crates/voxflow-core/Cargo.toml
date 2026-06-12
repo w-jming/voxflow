@@ -20,6 +20,9 @@ ureq = { version = "2", default-features = false, features = ["tls"] }
 hex.workspace = true
 indexmap.workspace = true
 voxflow-asr.workspace = true
+voxflow-asr-qwen3.workspace = true
+voxflow-asr-sherpa.workspace = true
+voxflow-asr-volcano.workspace = true
 voxflow-audio.workspace = true
 voxflow-input.workspace = true
 voxflow-ipc.workspace = true

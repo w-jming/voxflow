@@ -148,6 +148,8 @@ pub struct AudioInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelInfo {
+    #[serde(default)]
+    pub asr_backend: Option<String>,
     pub active_asr: String,
     pub active_refiner: Option<String>,
     pub intent_classifier: IntentClassifierInfo,

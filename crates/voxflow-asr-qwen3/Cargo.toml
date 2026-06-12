@@ -1,0 +1,15 @@
+[package]
+name = "voxflow-asr-qwen3"
+description = "Qwen3-ASR + vLLM sidecar backend for the VoxFlow StreamingRecognizer trait (D-22)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+voxflow-asr.workspace = true

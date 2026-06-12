@@ -13,6 +13,99 @@ pub struct Config {
     pub correction: CorrectionConfig,
     pub ui: UiConfig,
     pub models: ModelConfig,
+    /// ASR 后端选择(D-22:默认 Qwen3-ASR-1.7B + vLLM;可切火山 API 或本地 zipformer)。
+    #[serde(default)]
+    pub asr: AsrConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct AsrConfig {
+    pub backend: AsrBackend,
+    pub qwen3: Qwen3SidecarConfig,
+    pub volcano: VolcanoApiConfig,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AsrBackend {
+    /// 本地 Qwen3-ASR + vLLM sidecar(默认,D-22)。
+    Qwen3Vllm,
+    /// 火山引擎大模型流式语音识别 API(需用户配置密钥)。
+    VolcanoApi,
+    /// 本地 sherpa-onnx streaming zipformer(CPU 兜底)。
+    ZipformerLocal,
+    /// 测试用脚本化识别器。
+    Mock,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Qwen3SidecarConfig {
+    /// venv Python 解释器;部署脚本写入绝对路径。
+    pub python: String,
+    /// sidecar 脚本路径;空 = 在可执行文件旁与仓库 `sidecar/` 中查找。
+    pub sidecar_script: String,
+    /// HF 模型 ID 或本地权重目录。
+    pub model: String,
+    pub gpu_memory_utilization: f32,
+    pub chunk_size_sec: f32,
+    pub unfixed_chunk_num: u32,
+    pub unfixed_token_num: u32,
+    pub max_new_tokens: u32,
+}
+
+impl Default for Qwen3SidecarConfig {
+    fn default() -> Self {
+        Self {
+            python: "python3".to_string(),
+            sidecar_script: String::new(),
+            model: "Qwen/Qwen3-ASR-1.7B".to_string(),
+            gpu_memory_utilization: 0.8,
+            chunk_size_sec: 2.0,
+            unfixed_chunk_num: 2,
+            unfixed_token_num: 5,
+            max_new_tokens: 32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct VolcanoApiConfig {
+    /// 控制台获取的 APP ID(X-Api-App-Key)。
+    pub app_key: String,
+    /// Access Token(X-Api-Access-Key);仅存本机用户配置,不入仓库。
+    pub access_key: String,
+    pub resource_id: String,
+    pub model_name: String,
+    pub endpoint: String,
+    pub enable_itn: bool,
+    pub enable_punc: bool,
+}
+
+impl Default for VolcanoApiConfig {
+    fn default() -> Self {
+        Self {
+            app_key: String::new(),
+            access_key: String::new(),
+            resource_id: "volc.bigasr.sauc.duration".to_string(),
+            model_name: "bigmodel".to_string(),
+            endpoint: "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel".to_string(),
+            enable_itn: true,
+            enable_punc: true,
+        }
+    }
+}
+
+impl Default for AsrConfig {
+    fn default() -> Self {
+        Self {
+            backend: AsrBackend::Qwen3Vllm,
+            qwen3: Qwen3SidecarConfig::default(),
+            volcano: VolcanoApiConfig::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -141,6 +234,7 @@ impl Default for Config {
                 active_refiner: None,
                 intent_classifier: "semantic-intent-small".to_string(),
             },
+            asr: AsrConfig::default(),
         }
     }
 }
