@@ -1,192 +1,151 @@
-# 声流输入法 / VoxFlow Input
+# VoxFlow / 声流输入法
 
-VoxFlow 是 Linux 桌面中文/英文语音输入法。它提供原生 GTK 控制中心、桌面启动器、右上角控制图标、全局快捷键、自动标点、口语修正、简体/繁体输出设置和可切换 ASR 模型。
+VoxFlow 下一代版本是 Linux 优先、后续跨平台的本地流式桌面语音输入法。当前仓库正在按 `docs/redesign/` 从旧 Python/GTK 0.2.0 直接重写为 Rust Core + Tauri 控制台 + IBus/Fcitx5 输入法前端。
 
-## 安装
+当前阶段:阶段 2 IBus 原型自动化链路已基本成形,真实桌面输入上下文仍待人工验证;阶段 3 真实流式 ASR 的抽象、stable 判定、mock replay 基准、能量 VAD 基线、音频探测和模型管理骨架已开始;阶段 5 的语义撤销账本、规则状态机、安全门和平台无关输入操作映射已进入 Core 单元测试。阶段 0/1 已建立 Rust workspace 和 `voxflow-core` 原型;旧版 Python 实现和旧打包路径已移除,历史可由 git 追溯。
 
-Debian/Ubuntu 用户安装本机打包产物：
+## 规格来源
 
-```bash
-sudo apt install ./dist/voxflow_0.2.0_amd64.deb
-```
+实现依据只来自:
 
-安装后从应用菜单打开“声流输入法”，或运行：
+- `AGENTS.md`
+- `docs/redesign/README.md`
+- `docs/redesign/product/requirements.md`
+- `docs/redesign/engineering/migration-plan.md`
+- `docs/redesign/architecture/*.md`
+- `docs/redesign/engineering/testing-strategy.md`
 
-```bash
-voxflow-gui
-```
+如实现与文档冲突,先更新文档并说明影响。
 
-这个入口会打开原生桌面控制中心，并启动后台输入服务。
-
-也可以使用解压版安装到任意目录，例如 `/data/apps/voxflow`：
-
-```bash
-mkdir -p /data/apps
-tar -xzf dist/voxflow-0.2.0_amd64.tar.gz -C /data/apps
-/data/apps/voxflow-0.2.0/bin/voxflow doctor
-/data/apps/voxflow-0.2.0/bin/voxflow-gui
-```
-
-可选安装用户级桌面入口和 IBus component：
+## 当前可用命令
 
 ```bash
-/data/apps/voxflow-0.2.0/bin/voxflow-install-desktop
-/data/apps/voxflow-0.2.0/bin/voxflow-install-ibus
+cargo run -p voxflow-core -- --help
+cargo run -p voxflow-core -- status
+cargo run -p voxflow-core -- mock-session
+cargo run -p voxflow-core -- models
+cargo run -p voxflow-core -- model-import MODEL_ID PATH [copy|symlink]
+cargo run -p voxflow-core -- model-activate MODEL_ID
+cargo run -p voxflow-core -- model-delete MODEL_ID
+cargo run -p voxflow-core -- asr-benchmark-mock
+cargo run -p voxflow-core -- asr-suite-mock
+cargo run -p voxflow-core -- audio-probe
+cargo run -p voxflow-core -- pipeline-smoke
+cargo run -p voxflow-core -- doctor
+cargo run -p voxflow-core -- serve
+cargo run -p voxflow-ibus -- component-xml
+cargo run -p voxflow-ibus -- register-json
+cargo run -p voxflow-ibus -- self-test
+cargo run -p voxflow-fcitx5 -- addon-conf
+cargo run -p voxflow-fcitx5 -- inputmethod-conf
+cargo run -p voxflow-fcitx5 -- register-json
+cargo run -p voxflow-fcitx5 -- self-test
+cargo run -p voxflow-fcitx5 -- probe
 ```
 
-## 使用
+`mock-session` 使用 `MockRecognizer` 输出 `dictation.partial`、`dictation.stable`、`dictation.final` JSONL 事件,用于阶段 1 IPC 和前端联调。
 
-默认快捷键是 `Ctrl+Space`，默认模式是“按一次开始录音，再按一次停止并输入”。把光标放到终端、浏览器搜索框、编辑器或聊天窗口后按快捷键即可输入。
+`models` 读取 `model-profiles/` 并核对 `$VOXFLOW_HOME/models/<model_id>/manifest.lock` 与逐文件 checksum,输出 `not_installed`、`ready`、`active` 或 `broken`。当前 `streaming-zh-en-small` profile 仍含 D-1 POC 占位来源/checksum,因此不会被误判为可用真实模型。
 
-控制台可以设置：
+`model-import` 支持本地模型目录 copy/symlink 导入。导入会先按 profile 校验必需文件和 SHA256,通过后写入 `$VOXFLOW_HOME/cache/imports/` 临时目录,生成 `manifest.lock`,再原子安装到 `$VOXFLOW_HOME/models/<model_id>/`。symlink 模式只在 VoxFlow 模型目录内建立逐文件链接,不向源目录写入 manifest。
 
-- 快捷键。
-- 录音模式：按键切换，或按住录音。
-- 输出字形：简体中文、繁体中文、模型原文。
-- 智能撤销：规则状态机 + VoxFlow 注入账本，可开启或关闭。
-- 语音模型：内置轻量模型、Qwen3-ASR 0.6B、Qwen3-ASR 1.7B。
-- 模型下载进度、速度、暂停/继续。
-- 本地模型校验、复制导入、软链接导入。
-- 用户数据目录，默认 `~/.voxflow/`。
+`model-activate` 只允许切换到 `ready` 或已 `active` 的本地模型,成功后持久化 `config.toml` 并广播 `config.changed`/`model.state_changed`。当前 runtime smoke 字段为 `pending_runtime_integration`,表示真实模型加载与 smoke inference 要等 sherpa-onnx/silero runtime 接入后补齐。
 
-右上角图标可以打开控制台、启动/停止/重启后台输入、打开日志目录，以及退出 VoxFlow。退出 VoxFlow 会停止后台输入服务。
+`model-delete` 只能删除非 Active 模型目录;Active 模型会返回 `model.active_locked`。
 
-## 安装位置与数据目录
+语义撤销基础目前在 Core 内部实现并测试:注入账本、冻结策略、规则状态机、安全门、修正记录、`correction.list_recent` IPC,以及安全门通过后的 delete/replace 到平台无关 `InputEvent` 的映射。`replace_entity` 会删除账本尾部完整 segment 后提交修正后的完整文本,避免把段内目标误映射成光标前局部删除。Core mock 听写路径可发出 `correction.applied.input_events`,IBus 投影层可翻译为 delete/commit 操作。ONNX 轻量分类器、真实 streaming ASR 流水线、Fcitx5、真实桌面删除验证和控制台修正页仍未完成。
 
-`apt install` 会把程序本体安装到系统目录，包括 `/usr/bin`、`/usr/share`、`/etc/voxflow` 和 `/opt/voxflow/venv`，因此会占用 `/` 所在分区的少量软件运行空间。大体积和会增长的数据不放进系统目录。
+`asr-benchmark-mock` 使用 `voxflow-asr` 的 mock recognizer、20 ms/16 kHz frame 和 Energy VAD 回放,输出阶段 3 基准报告 JSON 形状,包括 VAD 起点、首 partial/stable 时间和相对 VAD 起点延迟。该命令只验证 replay/latency 记录链路,不代表真实模型延迟或准确率。
 
-VoxFlow 的用户数据根目录由 `VOXFLOW_HOME` 控制，默认是：
+`asr-suite-mock` 在多个 mock replay case 上汇总 p90 延迟门控,输出 `first_partial_p90_ms` 与 `first_stable_p90_ms` 的预算、实测值和 pass/fail。该命令只固定阶段 3 go/no-go 报告口径;真实结论必须等 PipeWire native、silero/ONNX VAD、sherpa-onnx streaming 模型和回放样本接入后再出。
+
+`audio-probe` 检查本机 PipeWire runtime、`pw-cli`/`pw-record` 命令、`libpipewire-0.3` runtime 和 `pkg-config` 开发文件状态。`pw-record` 只作为诊断/兜底信号,不代表主链路会用子进程录音。
+
+`pipeline-smoke` 使用 synthetic 音频源、Energy VAD 和 mock recognizer 跑通 Core 内部流式管线,输出事件列表和 `frame_captured → vad_speech_start → first_partial/stable` 指标形状。该命令仍不代表真实模型或真实麦克风验收。
+
+`voxflow-ibus self-test` 走无桌面的阶段 2 POC 链路:IPC 听写事件 → 平台无关 `InputEvent` → IBus preedit/commit/delete 操作。测试明确禁止把"听写中"等状态文案放入 preedit。
+
+`voxflow-ibus core-roundtrip` 会连接真实 `voxflow-core` UDS,发送 `core.subscribe`、`frontend.register` 与 `dictation.start`,并把 Core 的 mock dictation 事件投影成 IBus 操作。`voxflow-ibus engine-focus-smoke` 走 zbus engine 的 `FocusIn/FocusOut` handler,用于验证引擎骨架到 Core 订阅流的桥接。`voxflow-ibus --ibus-engine --probe-once` 会连接当前 session D-Bus,注册 `org.freedesktop.IBus.Factory` 后立即退出,用于阶段 2 ibus-daemon 拉起路线 smoke;常驻 `--ibus-engine` 入口通过 Factory 的 `CreateEngine("voxflow")` 动态创建 `org.freedesktop.IBus.Engine` object,并暴露 `UpdatePreeditText(vub)`、`CommitText(v)`、`DeleteSurroundingText(iu)` signals。
+
+`voxflow-fcitx5` 当前是阶段 6 的离线可测骨架:生成 Fcitx5 addon/inputmethod metadata、声明 `frontend.register kind=fcitx5` 能力、把 mock dictation 与 correction 事件翻译为 Fcitx5 preedit/commit/delete 操作,并探测本机 `fcitx5` 命令和 pkg-config 开发文件。真实薄 C++ addon 动态库、KDE Plasma Wayland 真实应用 smoke 仍未完成。
+
+用户级 IBus component POC:
+
+```bash
+packaging/linux/ibus/install-ibus-user.sh /absolute/path/to/voxflow-ibus
+packaging/linux/ibus/uninstall-ibus-user.sh
+packaging/linux/ibus/smoke-private-ibus.sh /absolute/path/to/voxflow-ibus
+```
+
+用户级 Fcitx5 metadata 安装骨架:
+
+```bash
+packaging/linux/fcitx5/install-fcitx5-user.sh /absolute/path/to/voxflow.so /absolute/path/to/voxflow-fcitx5
+packaging/linux/fcitx5/uninstall-fcitx5-user.sh
+```
+
+该脚本需要真实 `voxflow.so` addon 动态库;当前没有动态库时会拒绝安装,避免注册不可用输入法。
+
+## 数据目录
+
+默认用户数据目录:
 
 ```text
 ~/.voxflow/
 ```
 
-其中：
+可通过 `VOXFLOW_HOME` 重定向。目录规划:
 
-- `~/.voxflow/config.toml`：用户设置。
-- `~/.voxflow/models/`：下载的 Qwen3-ASR 等大模型。
-- `~/.voxflow/logs/`：GUI、daemon、tray 日志。
-- `~/.voxflow/run/`：pid 等运行状态文件。
-- `~/.voxflow/cache/`：预留缓存目录。
-
-自定义目录示例：
-
-```bash
-export VOXFLOW_HOME=/data/voxflow
-voxflow-gui
+```text
+~/.voxflow/
+  config.toml
+  models/
+  cache/
+  logs/
+  run/
+  ledger/
 ```
 
-也可以直接在控制中心的“数据目录”输入框中修改。若显式设置了 `VOXFLOW_HOME` 环境变量，环境变量优先，控制中心不会覆盖它。
+IPC socket 默认位于:
 
-## 系统输入法模式
-
-安装 deb 后会注册 IBus 引擎 `VoxFlow Input`。在 GNOME/KDE 的输入源设置里添加 VoxFlow 后，VoxFlow 可以作为系统输入法工作：
-
-- 临时识别文本显示为 IBus preedit composition。
-- 稳定文本通过 IBus commit 写入当前光标处。
-- “不对 / 错了 / 不是”等修正会根据 VoxFlow 自己的提交账本撤销相关片段，不删除用户手动输入内容。
-- 选中 VoxFlow 输入法后可持续听写；切走输入法或焦点离开时停止。
-
-旧的快捷键 daemon 仍保留，适合不想修改系统输入源时使用；系统输入法模式更适合长时间连续输入。
-
-## 语义撤销
-
-VoxFlow 默认启用规则状态机 + 注入账本的智能撤销。设置里可以关闭该功能，关闭后“不是”“不对”“撤回”等都会按普通文本处理。
-
-语义意图后端采用可插拔设计，但软件界面只显示已经实现并可用的能力。MiniLM/SetFit、Qwen3-Embedding 0.6B 分类头和低置信 LLM 仲裁保留为源码和文档中的后续 TODO；未实现前不在控制中心显示。任何后端都只能提出撤销建议，真正删除必须经过 VoxFlow 注入账本验证。
-
-## 模型
-
-源码仓库内置 `Systran/faster-whisper-tiny` 作为轻量 fallback，许可证为 MIT，支持中文和英文在内的多语言输入。更高准确率模型可在控制中心点击“下载/继续”，也可以用命令行下载并切换：
-
-```bash
-voxflow models
-voxflow models --download qwen3-asr-0.6b
-voxflow models --select qwen3-asr-0.6b
-voxflow models --download qwen3-asr-1.7b
-voxflow models --select qwen3-asr-1.7b
+```text
+$XDG_RUNTIME_DIR/voxflow/core.sock
 ```
 
-Qwen3-ASR 0.6B/1.7B 使用官方 Hugging Face 模型仓库，许可证为 Apache-2.0。deb 默认不打包这些大模型；点击控制中心“下载/继续”或运行 `voxflow models --download ...` 后，模型会进入 `~/.voxflow/models/` 或 `$VOXFLOW_HOME/models/`。控制中心会显示下载目标、进度、速度，并支持暂停后继续。
+## 开发验证
 
-如果本机已经有 Qwen3-ASR 权重，可以先校验它是否为 VoxFlow 支持的官方权重：
-
-```bash
-voxflow models --select qwen3-asr-1.7b --validate-model /path/to/Qwen3-ASR-1.7B
-```
-
-校验会检查必需文件、`config.json` 架构、safetensors 索引/头部，并对官方 safetensors 权重文件做 SHA256 比对。校验失败时 VoxFlow 不会写入配置。
-
-如果本机已经有 Qwen3-ASR 权重，不需要重复下载。可以把已有目录导入到 VoxFlow 模型目录：
+Rust 工具链可用后运行:
 
 ```bash
-voxflow models --select qwen3-asr-1.7b --import-model /path/to/Qwen3-ASR-1.7B
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 ```
 
-如果不想复制 4GB+ 权重，可以创建符号链接：
+或:
 
 ```bash
-voxflow models --select qwen3-asr-1.7b --import-model /path/to/Qwen3-ASR-1.7B --symlink
+scripts/dev-check.sh
 ```
 
-本机当前下载目录也可以这样复用：
+推送前运行:
 
 ```bash
-voxflow models --select qwen3-asr-1.7b --import-model downloads/models/Qwen3-ASR-1.7B --symlink
+scripts/secret-scan.sh
 ```
 
-导入或软链接导入时会自动执行同样的 SHA256 和格式校验；通过后才会把模型路径写入 `~/.voxflow/config.toml`。
+## 后续阶段
 
-## 诊断
+按 `docs/redesign/engineering/migration-plan.md` 继续推进:
 
-检查依赖和运行环境：
-
-```bash
-voxflow doctor
-```
-
-查看后台日志：
-
-```bash
-tail -n 80 ~/.voxflow/logs/daemon.log
-```
-
-命令行一次性听写：
-
-```bash
-voxflow dictate --once
-```
-
-如果使用蓝牙耳机但没有输入，请在系统声音设置里确认蓝牙设备切到 headset / hands-free profile，而不是仅输出的 A2DP profile。
-
-## 开发与测试
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[mic,dev]'
-pytest -q
-python3 -m compileall src tests
-```
-
-构建 deb：
-
-```bash
-scripts/build_deb.sh
-```
-
-构建解压版：
-
-```bash
-scripts/build_portable.sh
-```
-
-默认构建轻量可用包，不把大模型写入 `/opt`。如果只想构建并测试：
-
-```bash
-scripts/build_deb.sh
-```
+1. Rust Core 原型
+2. IBus 原型(当前)
+3. 真实流式 ASR go/no-go
+4. Tauri 控制台与状态指示器
+5. 语义撤销与分类器
+6. Fcitx5 前端
+7. deb/portable MVP 发布
 
 ## 许可证
 
-VoxFlow 代码使用 MIT 许可证。内置 `Systran/faster-whisper-tiny` 模型使用 MIT 许可证。Qwen3-ASR 模型使用 Apache-2.0 许可证，下载来源为 Qwen 官方 Hugging Face 仓库。
+VoxFlow 代码使用 MIT 许可证。模型许可证、来源和校验值由 `model-profiles/` 与控制台模型页展示。

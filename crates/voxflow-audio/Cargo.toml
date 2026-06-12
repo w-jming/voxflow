@@ -1,0 +1,23 @@
+[package]
+name = "voxflow-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+# Native PipeWire capture (D-3 main path). Off by default so the workspace
+# still builds where libpipewire-0.3-dev is unavailable.
+pipewire-native = ["dep:pipewire"]
+
+[dependencies]
+anyhow.workspace = true
+pipewire = { version = "0.8", optional = true, features = ["v0_3_44"] }
+serde.workspace = true
+voxflow-asr.workspace = true
+
+[[bin]]
+name = "pipewire-smoke"
+path = "src/bin/pipewire_smoke.rs"
+required-features = ["pipewire-native"]

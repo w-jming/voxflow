@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/control-center/src-tauri",
+  "crates/voxflow-asr",
+  "crates/voxflow-asr-sherpa",
+  "crates/voxflow-audio",
+  "crates/voxflow-core",
+  "crates/voxflow-control",
+  "crates/voxflow-fcitx5",
+  "crates/voxflow-ibus",
+  "crates/voxflow-input",
+  "crates/voxflow-ipc",
+  "crates/voxflow-semantic",
+]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+authors = ["VoxFlow contributors"]
+
+[workspace.dependencies]
+anyhow = "1.0.75"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "1.0"
+tokio = { version = "1.37", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+hex = "0.4"
+indexmap = "2"
+voxflow-ipc = { path = "crates/voxflow-ipc" }
+voxflow-input = { path = "crates/voxflow-input" }
+voxflow-fcitx5 = { path = "crates/voxflow-fcitx5" }
+voxflow-asr = { path = "crates/voxflow-asr" }
+voxflow-asr-sherpa = { path = "crates/voxflow-asr-sherpa" }
+voxflow-audio = { path = "crates/voxflow-audio" }
+voxflow-semantic = { path = "crates/voxflow-semantic" }
+voxflow-control = { path = "crates/voxflow-control" }
+zbus = "=4.4.0"
+async-lock = "=3.3.0"
