@@ -73,6 +73,7 @@ mock 链路已就绪,这一步只差真实环境,且能提前暴露 zbus 信号�
 - [ ] 🧑 真机测试:Qwen3 sidecar 首次加载与流式听写。
 - [ ] ⚠️ **火山 API 完全未经真实服务测试(2026-06-12 标注:暂不具备测试条件,无可用密钥)**——协议按公开文档+参考实现编写,仅离线单测;获得密钥后必须先跑 `asr-live --backend volcano_api` 实测再视为可用,并同步更新 review-and-decisions D-22 与部署 README 的标注。
 - [ ] core 流水线真实音频泵接入(dictation.start 后 PipeWire→VAD→recognizer 持续推流;当前 IPC 层已按后端构建识别器,但听写音频循环仍待接)。
+- [ ] 🆕 **所有者硬性验收(2026-06-12):按下快捷键必须即刻进入听写,不得有加载/预热等待**。实现要求:① daemon 启动时后台**预载 + 预热** Qwen3 sidecar(一次性 1-2 分钟,登录时无感完成),模型常驻显存(~9.4GB,D-22 取舍);② sidecar 跨会话复用已实现(有 UT),Alt+S → start_session 为毫秒级;③ 可选:空闲 N 分钟自动卸载省显存、再按键时重载(默认关闭,作为设置项);④ 验收口径:热路径"按键→可听写"< 200ms。注:asr-live 每次冷启动是测试工具行为,与产品形态无关。
 
 ### GPU 优先与 2026 模型(D-21,2026-06-11 新增;调研见 `docs/redesign/architecture/model-research-2026.md`)
 
