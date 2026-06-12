@@ -1,0 +1,31 @@
+[package]
+name = "voxflow-asr-sherpa"
+description = "sherpa-onnx streaming backend for the VoxFlow StreamingRecognizer trait (D-17)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+# Live mic → VAD → ASR demo; needs libpipewire-0.3-dev (see platforms/linux.md).
+live-poc = ["dep:voxflow-audio", "voxflow-audio/pipewire-native"]
+
+[dependencies]
+anyhow.workspace = true
+hound = "3.5"
+serde.workspace = true
+serde_json.workspace = true
+sherpa-rs-sys = "0.6.8"
+tracing.workspace = true
+voxflow-asr.workspace = true
+voxflow-audio = { workspace = true, optional = true }
+
+[[bin]]
+name = "sherpa-poc"
+path = "src/bin/sherpa_poc.rs"
+
+[[bin]]
+name = "live-poc"
+path = "src/bin/live_poc.rs"
+required-features = ["live-poc"]

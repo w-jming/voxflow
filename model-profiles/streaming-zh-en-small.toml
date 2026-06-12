@@ -1,0 +1,39 @@
+# D-1 POC 实测回填(2026-06-11):sherpa-onnx streaming Zipformer 双语 int8。
+# 下载源为 Hugging Face 按文件下载(免解包);sha256 取自 HF LFS oid 并经本地实测一致。
+# POC 结果见 docs/release/stage-3-real-asr-poc.md。
+
+[profile]
+id = "streaming-zh-en-small"
+label = "流式中英双语(标准)"
+kind = "asr-streaming"
+backend = "sherpa-onnx"
+version = "2023.02.20"
+license = "Apache-2.0"
+languages = ["zh", "en"]
+streaming = true
+recommended = true
+min_ram_mb = 1024
+
+[source]
+url = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20/resolve/main/"
+size_bytes = 198270793
+
+[[files]]
+path = "encoder-epoch-99-avg-1.int8.onnx"
+size_bytes = 181895032
+sha256 = "8fa764187a261844f859d7143ebaa563af5d10adfece4c18a8f414c88cba2a9b"
+
+[[files]]
+path = "decoder-epoch-99-avg-1.int8.onnx"
+size_bytes = 13091040
+sha256 = "1a70c593d71e53f023f5f55b0b4cfff5055abb786ee3992e5f63dc2e273cc4fa"
+
+[[files]]
+path = "joiner-epoch-99-avg-1.int8.onnx"
+size_bytes = 3228404
+sha256 = "1ed689c5ed19dbaa725d9d191bb4822b5f4855a39e1ffd28cbc1f340d25b2ee0"
+
+[[files]]
+path = "tokens.txt"
+size_bytes = 56317
+sha256 = "a8e0e4ec53810e433789b54a5c0134a7eaa2ffca595a6334d54c00da858841d3"

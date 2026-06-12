@@ -1,0 +1,38 @@
+# sherpa-onnx streaming Zipformer 中文 xlarge(2025-06-30)。
+# 最高中文准确率档;encoder int8 仍有 726 MB,建议 8 GB 内存以上设备使用。
+
+[profile]
+id = "streaming-zh-xlarge-2025"
+label = "流式中文 2025 XLarge(最高准确率)"
+kind = "asr-streaming"
+backend = "sherpa-onnx"
+version = "2025.06.30"
+license = "Apache-2.0"
+languages = ["zh"]
+streaming = true
+recommended = false
+min_ram_mb = 3072
+
+[source]
+url = "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-zh-xlarge-int8-2025-06-30/resolve/main/"
+size_bytes = 771230802
+
+[[files]]
+path = "encoder.int8.onnx"
+size_bytes = 761133737
+sha256 = "f2c543a0330e1ed0bd09c82e4ae7d3f1cbee10a15feca638fcc4f88083a36b8a"
+
+[[files]]
+path = "decoder.onnx"
+size_bytes = 8533022
+sha256 = "8f9c903da2818f207304a3f30b9eeb30028e30398f333c1e95e12c97704173e6"
+
+[[files]]
+path = "joiner.int8.onnx"
+size_bytes = 1545417
+sha256 = "f76ffce14b6ef80098cfdbce8846896ff68133970abc314eafab632f910df0d7"
+
+[[files]]
+path = "tokens.txt"
+size_bytes = 18626
+sha256 = "6722bd1585f46f84456b29c3550a343a3cc375b971645773c02ed8e0b4e2405c"
