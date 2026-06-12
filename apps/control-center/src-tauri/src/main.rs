@@ -8,10 +8,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot};
 use voxflow_control::bridge::ReconnectPolicy;
 use voxflow_control::shell::{
@@ -19,14 +20,47 @@ use voxflow_control::shell::{
     DEFAULT_UI_SUBSCRIPTIONS,
 };
 
-/// Forwards shell events to the WebView.
-struct AppSink(AppHandle);
+/// Last payload per status channel, replayed via `resync` for WebViews that
+/// mount after the pump already connected (startup race).
+type EventCache = Arc<std::sync::Mutex<std::collections::HashMap<String, Value>>>;
+
+/// Forwards shell events to the WebView, caching connection/snapshot state.
+struct AppSink {
+    app: AppHandle,
+    cache: EventCache,
+}
+
+impl AppSink {
+    fn new(app: &AppHandle) -> Self {
+        Self {
+            app: app.clone(),
+            cache: app.state::<CachedEvents>().0.clone(),
+        }
+    }
+}
 
 impl ShellEventSink for AppSink {
     fn emit(&mut self, event: ShellEvent) {
-        if let Err(error) = Emitter::emit(&self.0, event.name.as_str(), event.payload) {
+        if event.name != voxflow_control::shell::TAURI_CORE_EVENT {
+            self.cache
+                .lock()
+                .expect("event cache lock")
+                .insert(event.name.clone(), event.payload.clone());
+        }
+        if let Err(error) = Emitter::emit(&self.app, event.name.as_str(), event.payload) {
             tracing::warn!(%error, channel = event.name, "failed to emit shell event");
         }
+    }
+}
+
+struct CachedEvents(EventCache);
+
+/// Replays the last connection/snapshot events; the frontend calls this once
+/// its listeners are registered.
+#[tauri::command]
+fn resync(app: AppHandle, state: tauri::State<'_, CachedEvents>) {
+    for (name, payload) in state.0.lock().expect("event cache lock").iter() {
+        let _ = Emitter::emit(&app, name.as_str(), payload.clone());
     }
 }
 
@@ -64,7 +98,7 @@ async fn connection_pump(app: AppHandle, mut commands: mpsc::Receiver<CommandReq
     let policy = ReconnectPolicy::default();
     let mut attempt: u32 = 0;
     loop {
-        let mut sink = AppSink(app.clone());
+        let mut sink = AppSink::new(&app);
         let socket = core_socket_path();
         match ShellIpcSession::connect(&socket, DEFAULT_UI_SUBSCRIPTIONS, &mut sink).await {
             Ok(mut session) => {
@@ -89,7 +123,7 @@ async fn pump_session(
     session: &mut ShellIpcSession,
     commands: &mut mpsc::Receiver<CommandRequest>,
 ) {
-    let mut sink = AppSink(app.clone());
+    let mut sink = AppSink::new(app);
     loop {
         while let Ok((invocation, reply)) = commands.try_recv() {
             let result = session
@@ -131,7 +165,10 @@ fn main() {
 
     tauri::Builder::default()
         .manage(CommandQueue(command_tx))
-        .invoke_handler(tauri::generate_handler![core_command])
+        .manage(CachedEvents(Arc::new(std::sync::Mutex::new(
+            std::collections::HashMap::new(),
+        ))))
+        .invoke_handler(tauri::generate_handler![core_command, resync])
         .setup(move |app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(connection_pump(handle, command_rx));

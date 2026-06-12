@@ -17,6 +17,10 @@ export interface CoreReply {
   message?: string;
 }
 
+export function resync(): Promise<void> {
+  return invoke("resync");
+}
+
 export async function coreCommand(
   name: string,
   payload: Record<string, unknown> = {},

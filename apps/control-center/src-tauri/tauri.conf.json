@@ -4,8 +4,7 @@
   "version": "0.3.0",
   "identifier": "org.voxflow.ControlCenter",
   "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
