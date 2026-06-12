@@ -69,6 +69,15 @@ def main():
                     max_new_tokens=int(msg.get("max_new_tokens", 32)),
                     max_model_len=int(msg.get("max_model_len", 16384)),
                 )
+                # Warm up compile/cudagraph capture now so the first real
+                # utterance does not stall ~15s (frames would be dropped).
+                warm = asr.init_streaming_state(
+                    unfixed_chunk_num=2, unfixed_token_num=5, chunk_size_sec=2.0
+                )
+                asr.streaming_transcribe(
+                    np.zeros(16000 * 4, dtype=np.float32), warm
+                )
+                asr.finish_streaming_transcribe(warm)
                 reply({"event": "ready"})
             except Exception as err:  # noqa: BLE001 — report anything to Rust
                 reply({"event": "error", "message": f"init failed: {err}"})
