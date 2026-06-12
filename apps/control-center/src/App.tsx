@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { onConnectionChanged, onCoreEvent, onSnapshot } from "./bridge";
+import { onConnectionChanged, onCoreEvent, onSnapshot, resync } from "./bridge";
 import Input from "./pages/Input";
 import Models from "./pages/Models";
 import Overview from "./pages/Overview";
@@ -51,6 +51,9 @@ export default function App() {
       onSnapshot((payload) => setSnapshot(payload)),
       onCoreEvent((name, payload) => applyCoreEvent(name, payload)),
     ];
+    // The pump may have connected before our listeners registered; ask the
+    // shell to replay the latest connection/snapshot events.
+    void Promise.all(subscriptions).then(() => resync());
     return () => {
       for (const subscription of subscriptions) {
         void subscription.then((unlisten) => unlisten());
