@@ -29,6 +29,7 @@ pub struct Qwen3SidecarOptions {
     pub unfixed_chunk_num: u32,
     pub unfixed_token_num: u32,
     pub max_new_tokens: u32,
+    pub max_model_len: u32,
 }
 
 impl Qwen3SidecarOptions {
@@ -37,11 +38,12 @@ impl Qwen3SidecarOptions {
             python: "python3".to_string(),
             sidecar_script: sidecar_script.into(),
             model: "Qwen/Qwen3-ASR-1.7B".to_string(),
-            gpu_memory_utilization: 0.8,
+            gpu_memory_utilization: 0.7,
             chunk_size_sec: 2.0,
             unfixed_chunk_num: 2,
             unfixed_token_num: 5,
             max_new_tokens: 32,
+            max_model_len: 16_384,
         }
     }
 }
@@ -182,6 +184,7 @@ impl Qwen3SidecarRecognizer {
                 "unfixed_chunk_num": self.options.unfixed_chunk_num,
                 "unfixed_token_num": self.options.unfixed_token_num,
                 "max_new_tokens": self.options.max_new_tokens,
+                "max_model_len": self.options.max_model_len,
             }))?;
             if reply.event != "ready" {
                 bail!("unexpected sidecar init reply: {}", reply.event);
