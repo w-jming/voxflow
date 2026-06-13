@@ -9,16 +9,34 @@ use crate::core_client::IbusCoreBridge;
 use crate::engine::IbusOperation;
 
 const IBUS_RELEASE_MASK: u32 = 1 << 30;
+const IBUS_SHIFT_MASK: u32 = 1 << 0;
+const IBUS_CONTROL_MASK: u32 = 1 << 2;
 const IBUS_MOD1_MASK: u32 = 1 << 3;
-const KEYVAL_LOWER_S: u32 = 0x73;
-const KEYVAL_UPPER_S: u32 = 0x53;
+const IBUS_SUPER_MASK: u32 = 1 << 26;
 
-/// `Some(is_press)` when the event is the Alt+S dictation hotkey (D-14),
-/// `None` for any other key.
-fn hotkey_match(keyval: u32, state: u32) -> Option<bool> {
-    let alt_held = state & IBUS_MOD1_MASK != 0;
-    let is_s = keyval == KEYVAL_LOWER_S || keyval == KEYVAL_UPPER_S;
-    (alt_held && is_s).then_some(state & IBUS_RELEASE_MASK == 0)
+/// 解析 "Alt+S" / "Ctrl+Alt+D" 形式的快捷键为(修饰键掩码, 小写键值)。
+fn parse_hotkey(spec: &str) -> Option<(u32, u32)> {
+    let mut mask = 0_u32;
+    let mut key = None;
+    for part in spec.split('+') {
+        match part.trim().to_ascii_lowercase().as_str() {
+            "alt" => mask |= IBUS_MOD1_MASK,
+            "ctrl" | "control" => mask |= IBUS_CONTROL_MASK,
+            "shift" => mask |= IBUS_SHIFT_MASK,
+            "super" | "meta" | "win" => mask |= IBUS_SUPER_MASK,
+            other if other.chars().count() == 1 => key = other.chars().next().map(|ch| ch as u32),
+            _ => return None,
+        }
+    }
+    key.map(|keyval| (mask, keyval))
+}
+
+/// `Some(is_press)` when the event matches the configured hotkey (D-14).
+fn hotkey_match(hotkey: (u32, u32), keyval: u32, state: u32) -> Option<bool> {
+    let (mask, key) = hotkey;
+    let mods_held = state & mask == mask;
+    let is_key = keyval == key || keyval == key.saturating_sub(0x20);
+    (mods_held && is_key).then_some(state & IBUS_RELEASE_MASK == 0)
 }
 
 #[derive(Default)]
@@ -27,6 +45,8 @@ pub struct ZbusIbusEngine {
     capabilities_mask: u32,
     pending_operations: Vec<IbusOperation>,
     listening: bool,
+    hotkey: Option<(u32, u32)>,
+    hold_mode: bool,
     #[allow(clippy::type_complexity)]
     core_bridge: Option<Box<dyn IbusCoreBridge>>,
 }
@@ -172,7 +192,13 @@ impl ZbusIbusEngine {
         &mut self,
         #[zbus(signal_context)] _ctxt: SignalContext<'_>,
     ) -> zbus::fdo::Result<()> {
-        // Dictation is hotkey-driven (Alt+S, D-14); focus only reports state.
+        // 每次进入焦点刷新快捷键/模式配置(支持 UI 实时自定义)。
+        if let Some(bridge) = &mut self.core_bridge {
+            let (hotkey, mode) = bridge.input_settings();
+            self.hotkey = parse_hotkey(&hotkey);
+            self.hold_mode = mode == "hold";
+        }
+        // Dictation is hotkey-driven (D-14); focus only reports state.
         self.report(FrontendEvent::Focused { app_hint: None })
     }
 
@@ -207,11 +233,21 @@ impl ZbusIbusEngine {
         _keycode: u32,
         state: u32,
     ) -> zbus::fdo::Result<bool> {
-        let Some(is_press) = hotkey_match(keyval, state) else {
+        let hotkey = self.hotkey.unwrap_or((IBUS_MOD1_MASK, 's' as u32));
+        let Some(is_press) = hotkey_match(hotkey, keyval, state) else {
             return Ok(false);
         };
-        // Consume both edges of Alt+S; act on press only (D-14 toggle).
-        if is_press {
+        if self.hold_mode {
+            // 按住说话:按下开始,松开结束。
+            if is_press && !self.listening {
+                self.listening = true;
+                self.start_dictation(&ctxt)?;
+            } else if !is_press && self.listening {
+                self.listening = false;
+                self.stop_dictation(&ctxt)?;
+            }
+        } else if is_press {
+            // 切换模式:按一次开始,再按一次结束。
             if self.listening {
                 self.listening = false;
                 self.stop_dictation(&ctxt)?;
@@ -411,13 +447,20 @@ mod tests {
 
     #[test]
     fn alt_s_press_matches_hotkey_and_other_keys_pass_through() {
-        assert_eq!(hotkey_match(KEYVAL_LOWER_S, IBUS_MOD1_MASK), Some(true));
+        let alt_s = parse_hotkey("Alt+S").unwrap();
+        assert_eq!(hotkey_match(alt_s, 's' as u32, IBUS_MOD1_MASK), Some(true));
         assert_eq!(
-            hotkey_match(KEYVAL_UPPER_S, IBUS_MOD1_MASK | IBUS_RELEASE_MASK),
+            hotkey_match(alt_s, 'S' as u32, IBUS_MOD1_MASK | IBUS_RELEASE_MASK),
             Some(false)
         );
-        assert_eq!(hotkey_match(0x61, IBUS_MOD1_MASK), None); // Alt+A
-        assert_eq!(hotkey_match(KEYVAL_LOWER_S, 0), None); // bare s
+        assert_eq!(hotkey_match(alt_s, 'a' as u32, IBUS_MOD1_MASK), None);
+        assert_eq!(hotkey_match(alt_s, 's' as u32, 0), None);
+        let ctrl_alt_d = parse_hotkey("Ctrl+Alt+D").unwrap();
+        assert_eq!(
+            hotkey_match(ctrl_alt_d, 'd' as u32, IBUS_CONTROL_MASK | IBUS_MOD1_MASK),
+            Some(true)
+        );
+        assert_eq!(parse_hotkey("Alt+Enter怪"), None);
     }
 
     #[test]

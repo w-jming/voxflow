@@ -41,8 +41,27 @@ impl AppSink {
     }
 }
 
+fn set_tray_tooltip(app: &AppHandle, text: &str) {
+    if let Some(tray) = app.tray_by_id("voxflow") {
+        let _ = tray.set_tooltip(Some(text));
+    }
+}
+
 impl ShellEventSink for AppSink {
     fn emit(&mut self, event: ShellEvent) {
+        // 托盘标注引擎可用性(所有者要求:加载中需明确标注)。
+        if event.name == voxflow_control::shell::TAURI_CORE_EVENT {
+            let inner = &event.payload;
+            if inner["name"] == "core.notice" && inner["payload"]["code"] == "asr.engine_ready" {
+                set_tray_tooltip(&self.app, "VoxFlow — 引擎就绪,按 Alt+S 听写");
+            }
+        } else if event.name == voxflow_control::shell::TAURI_CONNECTION_EVENT {
+            if event.payload["state"] == "connected" {
+                set_tray_tooltip(&self.app, "VoxFlow — 引擎加载中…(此期间听写不可用)");
+            } else {
+                set_tray_tooltip(&self.app, "VoxFlow — Core 未连接");
+            }
+        }
         if event.name != voxflow_control::shell::TAURI_CORE_EVENT {
             self.cache
                 .lock()
@@ -267,7 +286,7 @@ fn setup_tray(app: &AppHandle, queue: mpsc::Sender<CommandRequest>) -> tauri::Re
 
     TrayIconBuilder::with_id("voxflow")
         .icon(app.default_window_icon().expect("bundled icon").clone())
-        .tooltip("VoxFlow 声流输入法")
+        .tooltip("VoxFlow — 启动中…")
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| {

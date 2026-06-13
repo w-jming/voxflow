@@ -48,11 +48,11 @@
   --vf-bg-deep: #e3ecf5;
   --vf-panel: #ffffff;
   --vf-panel-raised: #f6fafd;
-  --vf-line: #d4e1ee;
-  --vf-line-strong: #b6cbe0;
-  --vf-ink: #11243c;
-  --vf-ink-dim: #4a6485;
-  --vf-ink-faint: #7e95b0;
+  --vf-line: #c9d9e8;
+  --vf-line-strong: #9fb9d2;
+  --vf-ink: #0c1c30;
+  --vf-ink-dim: #33506f;
+  --vf-ink-faint: #54708e;
   --vf-glow: var(--vf-primary-600);
   --vf-accent: var(--vf-primary-600);
   --vf-accent-deep: var(--vf-primary-700);

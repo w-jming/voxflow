@@ -47,6 +47,19 @@ export default function Overview() {
       {connectionError ? (
         <div className="error-banner">{connectionError}</div>
       ) : null}
+      {engine !== "ready" && connection === "connected" ? (
+        <div
+          className="error-banner"
+          style={{
+            borderColor: "rgba(251,191,36,0.5)",
+            background: "rgba(251,191,36,0.08)",
+            color: "var(--vf-warn)",
+          }}
+        >
+          识别引擎{engine === "loading" ? "正在加载(约 1-2 分钟)" : `状态:${engine}`}
+          ,此期间听写不可用。
+        </div>
+      ) : null}
 
       <section className="panel">
         <div className="panel-label">听写状态</div>
