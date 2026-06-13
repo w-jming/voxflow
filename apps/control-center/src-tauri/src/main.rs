@@ -352,6 +352,11 @@ fn main() {
     let (command_tx, command_rx) = mpsc::channel::<CommandRequest>(32);
 
     tauri::Builder::default()
+        // Must be the first plugin: a second launch (app icon / launcher)
+        // focuses the running window instead of starting another instance.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            show_main_window(app);
+        }))
         .manage(CommandQueue(command_tx))
         .manage(CachedEvents(Arc::new(std::sync::Mutex::new(
             std::collections::HashMap::new(),
