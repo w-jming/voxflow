@@ -63,12 +63,14 @@ pub struct VoxflowCore {
     downloads: DownloadManager,
     event_sender: Option<tokio::sync::broadcast::Sender<Envelope>>,
     self_handle: Option<std::sync::Weak<tokio::sync::Mutex<VoxflowCore>>>,
+    text_converter: crate::text::TextConverter,
 }
 
 impl VoxflowCore {
     pub fn load(paths: VoxflowPaths) -> Result<Self> {
         paths.ensure()?;
         let config = Config::load_or_default(&paths.config)?;
+        let config_text_script = config.text.output_script.clone();
         Ok(Self {
             paths,
             config,
@@ -94,6 +96,7 @@ impl VoxflowCore {
             downloads: DownloadManager::default(),
             event_sender: None,
             self_handle: None,
+            text_converter: crate::text::TextConverter::new(&config_text_script),
         })
     }
 
@@ -109,6 +112,7 @@ impl VoxflowCore {
     }
 
     pub fn with_config(paths: VoxflowPaths, config: Config) -> Self {
+        let text_script = config.text.output_script.clone();
         Self {
             paths,
             config,
@@ -134,6 +138,7 @@ impl VoxflowCore {
             downloads: DownloadManager::default(),
             event_sender: None,
             self_handle: None,
+            text_converter: crate::text::TextConverter::new(&text_script),
         }
     }
 
@@ -158,6 +163,10 @@ impl VoxflowCore {
 
     pub fn event_sender_clone(&self) -> Option<tokio::sync::broadcast::Sender<Envelope>> {
         self.event_sender.clone()
+    }
+
+    pub fn text_converter_clone(&self) -> crate::text::TextConverter {
+        self.text_converter.clone()
     }
 
     pub fn set_engine_state(&mut self, state: impl Into<String>) {
@@ -355,6 +364,8 @@ impl VoxflowCore {
                         json!({}),
                     );
                 }
+                self.text_converter =
+                    crate::text::TextConverter::new(&self.config.text.output_script);
                 self.config_revision += 1;
                 let mut outcome =
                     self.respond(request, json!({ "config_revision": self.config_revision }));
@@ -691,6 +702,7 @@ impl VoxflowCore {
                         self.engine.clone(),
                         sender,
                         session.clone(),
+                        self.text_converter.clone(),
                     ));
                 } else {
                     self.dictation_state = DictationState::Error;
@@ -1052,6 +1064,7 @@ impl VoxflowCore {
     }
 
     fn project_asr_event(&mut self, session_id: &str, event: AsrEvent) -> Vec<Envelope> {
+        let event = self.text_converter.convert_event(event);
         match event {
             AsrEvent::Final {
                 revision,

@@ -54,6 +54,8 @@ pub struct Qwen3SidecarConfig {
     pub unfixed_token_num: u32,
     pub max_new_tokens: u32,
     pub max_model_len: u32,
+    /// 转写语言:"zh"(默认,中文+内嵌英文,避免被整体翻译成英文)/ "en" / "" 自动。
+    pub language: String,
 }
 
 impl Default for Qwen3SidecarConfig {
@@ -68,6 +70,7 @@ impl Default for Qwen3SidecarConfig {
             unfixed_token_num: 5,
             max_new_tokens: 32,
             max_model_len: 16_384,
+            language: "zh".to_string(),
         }
     }
 }

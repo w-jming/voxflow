@@ -52,9 +52,15 @@ impl ZbusIbusFactory {
             )));
         }
 
+        tracing::info!(engine_name, "ibus CreateEngine called");
         let path = self.next_engine_path(engine_name)?;
-        let core_session =
-            CoreEngineSession::connect(self.core_socket.clone()).map_err(to_fdo_error)?;
+        let core_session = match CoreEngineSession::connect(self.core_socket.clone()) {
+            Ok(session) => session,
+            Err(error) => {
+                tracing::warn!(%error, "engine failed to connect to core");
+                return Err(to_fdo_error(error));
+            }
+        };
         object_server
             .at(
                 ObjectPath::from(&path),

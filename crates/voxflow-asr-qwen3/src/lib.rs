@@ -30,6 +30,7 @@ pub struct Qwen3SidecarOptions {
     pub unfixed_token_num: u32,
     pub max_new_tokens: u32,
     pub max_model_len: u32,
+    pub language: String,
 }
 
 impl Qwen3SidecarOptions {
@@ -44,6 +45,7 @@ impl Qwen3SidecarOptions {
             unfixed_token_num: 5,
             max_new_tokens: 32,
             max_model_len: 16_384,
+            language: "zh".to_string(),
         }
     }
 }
@@ -203,6 +205,7 @@ impl Qwen3SidecarRecognizer {
                 "unfixed_token_num": self.options.unfixed_token_num,
                 "max_new_tokens": self.options.max_new_tokens,
                 "max_model_len": self.options.max_model_len,
+                "language": self.options.language,
             }))?;
             if reply.event != "ready" {
                 bail!("unexpected sidecar init reply: {}", reply.event);

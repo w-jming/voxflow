@@ -87,8 +87,15 @@ impl ZbusIbusEngine {
     }
 
     fn start_dictation(&mut self, ctxt: &SignalContext<'_>) -> zbus::fdo::Result<()> {
+        tracing::info!("hotkey -> start_dictation");
         if let Some(core_bridge) = &mut self.core_bridge {
-            let operations = core_bridge.start_dictation().map_err(to_fdo_error)?;
+            let operations = match core_bridge.start_dictation() {
+                Ok(operations) => operations,
+                Err(error) => {
+                    tracing::warn!(%error, "start_dictation failed");
+                    return Err(to_fdo_error(error));
+                }
+            };
             self.emit_operations(ctxt, &operations)?;
             self.pending_operations.extend(operations);
         }
@@ -96,6 +103,7 @@ impl ZbusIbusEngine {
     }
 
     fn stop_dictation(&mut self, ctxt: &SignalContext<'_>) -> zbus::fdo::Result<()> {
+        tracing::info!("hotkey -> stop_dictation");
         if let Some(core_bridge) = &mut self.core_bridge {
             let operations = core_bridge.stop_dictation().map_err(to_fdo_error)?;
             self.emit_operations(ctxt, &operations)?;
@@ -212,6 +220,7 @@ impl ZbusIbusEngine {
         #[zbus(signal_context)] _ctxt: SignalContext<'_>,
     ) -> zbus::fdo::Result<()> {
         self.refresh_settings(true);
+        tracing::info!(hotkey = ?self.hotkey, hold = self.hold_mode, "focus_in");
         // Dictation is hotkey-driven (D-14); focus only reports state.
         self.report(FrontendEvent::Focused { app_hint: None })
     }
