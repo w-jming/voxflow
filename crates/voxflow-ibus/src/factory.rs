@@ -15,6 +15,9 @@ use crate::{
 pub const IBUS_FACTORY_OBJECT_PATH: &str = "/org/freedesktop/IBus/Factory";
 pub const IBUS_ENGINE_OBJECT_BASE: &str = "/org/freedesktop/IBus/Engine/VoxFlow";
 
+/// 最近一次 CreateEngine 返回的对象路径;事件泵向它发信号。
+pub static ACTIVE_ENGINE_PATH: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
 pub struct ZbusIbusFactory {
     core_socket: PathBuf,
     next_engine_id: u64,
@@ -59,6 +62,7 @@ impl ZbusIbusFactory {
             )
             .await
             .map_err(|error| zbus::fdo::Error::Failed(error.to_string()))?;
+        *ACTIVE_ENGINE_PATH.lock().expect("engine path lock") = Some(path.to_string());
         Ok(path)
     }
 

@@ -41,6 +41,7 @@ export default function Input() {
   const lastError = useControlStore((state) => state.lastError);
   const [asr, setAsr] = useState<AsrConfigShape | null>(null);
   const [hotkey, setHotkey] = useState("Alt+S");
+  const [mode, setMode] = useState<"toggle" | "hold">("toggle");
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
 
@@ -50,10 +51,9 @@ export default function Input() {
       if (reply.kind === "response" && reply.payload) {
         const config = reply.payload.config as Record<string, unknown>;
         setAsr(config.asr as unknown as AsrConfigShape);
-        setHotkey(
-          ((config.input as Record<string, unknown>)?.hotkey as string) ??
-            "Alt+S",
-        );
+        const input = config.input as Record<string, unknown> | undefined;
+        setHotkey((input?.hotkey as string) ?? "Alt+S");
+        setMode(((input?.mode as string) ?? "toggle") as "toggle" | "hold");
       }
     })();
   }, []);
@@ -77,14 +77,58 @@ export default function Input() {
       {lastError ? <div className="error-banner">{lastError}</div> : null}
 
       <section className="panel">
-        <div className="panel-label">快捷键</div>
-        <div className="row">
+        <div className="panel-label">快捷键与模式</div>
+        <div className="row" style={{ marginBottom: 12 }}>
           <span className="telemetry">
-            <span className="k">听写开关</span>
+            <span className="k">听写快捷键(可自定义,如 Ctrl+Alt+D)</span>
             <span className="v glow">{hotkey}</span>
           </span>
-          <span className="muted">toggle / hold 共用(D-14)</span>
+          <input
+            className="vf"
+            style={{ width: 140 }}
+            value={hotkey}
+            onChange={(event) => setHotkey(event.target.value)}
+          />
+          <button
+            className="vf ghost"
+            onClick={() => void save({ input: { hotkey } })}
+          >
+            保存快捷键
+          </button>
         </div>
+        <label className={`choice ${mode === "toggle" ? "selected" : ""}`}>
+          <input
+            type="radio"
+            name="dictation-mode"
+            checked={mode === "toggle"}
+            onChange={() => {
+              setMode("toggle");
+              void save({ input: { mode: "toggle" } });
+            }}
+          />
+          <div className="grow">
+            <div>切换模式(Toggle)</div>
+            <div className="muted">按一次开始听写,再按一次结束。</div>
+          </div>
+        </label>
+        <label className={`choice ${mode === "hold" ? "selected" : ""}`}>
+          <input
+            type="radio"
+            name="dictation-mode"
+            checked={mode === "hold"}
+            onChange={() => {
+              setMode("hold");
+              void save({ input: { mode: "hold" } });
+            }}
+          />
+          <div className="grow">
+            <div>按住模式(Hold / 按住说话)</div>
+            <div className="muted">按住快捷键说话,松开即结束。</div>
+          </div>
+        </label>
+        <p className="hint" style={{ margin: "6px 0 0" }}>
+          修改后在下一次窗口聚焦时生效。
+        </p>
       </section>
 
       {!asr ? (
