@@ -45,7 +45,7 @@ impl Qwen3SidecarOptions {
             unfixed_token_num: 5,
             max_new_tokens: 32,
             max_model_len: 16_384,
-            language: "zh".to_string(),
+            language: "Chinese".to_string(),
         }
     }
 }

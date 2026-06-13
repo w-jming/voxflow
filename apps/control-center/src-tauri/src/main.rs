@@ -193,6 +193,50 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
+/// Set while a real quit is in progress, so the close-to-tray handler lets the
+/// process actually exit instead of hiding the window (the previous behaviour
+/// left a zombie holding the single-instance lock → relaunch focused the dead
+/// instance).
+static QUITTING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Stops dictation and terminates the app for good.
+fn quit_app(app: &AppHandle) {
+    QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
+    tray_core_command(
+        app.state::<CommandQueue>().0.clone().borrow(),
+        "dictation.stop",
+        serde_json::json!({}),
+    );
+    // Give the stop a beat to flush, then exit hard so no thread keeps the
+    // process (and the single-instance lock) alive.
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(150));
+        handle.exit(0);
+        std::process::exit(0);
+    });
+}
+
+#[tauri::command]
+fn quit_app_command(app: AppHandle) {
+    quit_app(&app);
+}
+
+/// Restarts the control-center process (re-exec the same binary).
+#[tauri::command]
+fn restart_app_command(app: AppHandle) {
+    QUITTING.store(true, std::sync::atomic::Ordering::SeqCst);
+    let exe = std::env::current_exe();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(150));
+        if let Ok(exe) = exe {
+            let _ = std::process::Command::new(exe).spawn();
+        }
+        app.exit(0);
+        std::process::exit(0);
+    });
+}
+
 /// 右上角托盘:状态切换、后端/模型快速切换、打开控制台、退出。
 fn setup_tray(app: &AppHandle, queue: mpsc::Sender<CommandRequest>) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -307,14 +351,7 @@ fn setup_tray(app: &AppHandle, queue: mpsc::Sender<CommandRequest>) -> tauri::Re
                     );
                 }
                 "open-console" => show_main_window(app),
-                "quit" => {
-                    tray_core_command(
-                        app.state::<CommandQueue>().0.clone().borrow(),
-                        "dictation.stop",
-                        serde_json::json!({}),
-                    );
-                    app.exit(0);
-                }
+                "quit" => quit_app(app),
                 id if id.starts_with("backend-") => {
                     let backend = id.trim_start_matches("backend-");
                     tray_core_command(
@@ -361,7 +398,12 @@ fn main() {
         .manage(CachedEvents(Arc::new(std::sync::Mutex::new(
             std::collections::HashMap::new(),
         ))))
-        .invoke_handler(tauri::generate_handler![core_command, resync])
+        .invoke_handler(tauri::generate_handler![
+            core_command,
+            resync,
+            quit_app_command,
+            restart_app_command
+        ])
         .setup(move |app| {
             let handle = app.handle().clone();
             setup_tray(&handle, app.state::<CommandQueue>().0.clone())?;
@@ -369,8 +411,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 关窗 = 隐藏到托盘,不退出(托盘「退出」才真正退出)。
+            // 关窗 = 隐藏到托盘(托盘/界面「退出」才真正退出)。退出进行中则放行。
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if QUITTING.load(std::sync::atomic::Ordering::SeqCst) {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.hide();
             }

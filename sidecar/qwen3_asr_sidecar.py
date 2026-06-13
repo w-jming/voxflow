@@ -40,6 +40,27 @@ def reply(obj):
     _PROTOCOL_OUT.flush()
 
 
+# Qwen3-ASR expects full language names; accept common codes/aliases too.
+_LANGUAGE_ALIASES = {
+    "": None, "auto": None, "none": None,
+    "zh": "Chinese", "zh-cn": "Chinese", "zh_cn": "Chinese", "chinese": "Chinese",
+    "en": "English", "english": "English",
+    "yue": "Cantonese", "cantonese": "Cantonese", "zh-hk": "Cantonese",
+    "ja": "Japanese", "japanese": "Japanese",
+    "ko": "Korean", "korean": "Korean",
+}
+
+
+def _normalize_language(value):
+    if not value:
+        return None
+    key = str(value).strip().lower()
+    if key in _LANGUAGE_ALIASES:
+        return _LANGUAGE_ALIASES[key]
+    # Already a canonical full name (e.g. "French"): Title-case it.
+    return str(value).strip().title()
+
+
 def main():
     asr = None
     state = None
@@ -88,7 +109,7 @@ def main():
             if asr is None:
                 reply({"event": "error", "message": "not initialized"})
                 continue
-            language = init_cfg.get("language") or None
+            language = _normalize_language(init_cfg.get("language"))
             state = asr.init_streaming_state(
                 language=language,
                 unfixed_chunk_num=int(init_cfg.get("unfixed_chunk_num", 2)),
