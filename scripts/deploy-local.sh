@@ -88,8 +88,8 @@ mkdir -p "$ICON_DIR" "$APPS_DIR"
 install -m 644 "$REPO_DIR/apps/control-center/src-tauri/icons/icon.png" "$ICON_DIR/voxflow.png"
 sed -e "s|@LAUNCH@|$DEPLOY_DIR/voxflow-launch.sh|" \
     -e "s|@ICON@|voxflow|" \
-    "$REPO_DIR/packaging/linux/voxflow.desktop.in" > "$APPS_DIR/voxflow.desktop"
-chmod +x "$APPS_DIR/voxflow.desktop"
+    "$REPO_DIR/packaging/linux/voxflow.desktop.in" > "$APPS_DIR/voxflow-control-center.desktop"
+chmod +x "$APPS_DIR/voxflow-control-center.desktop"
 update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
 gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
 echo "desktop entry: $APPS_DIR/voxflow.desktop"
