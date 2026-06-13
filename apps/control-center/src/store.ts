@@ -66,12 +66,16 @@ interface ControlState {
   connectionError: string | null;
   snapshot: Record<string, unknown> | null;
   status: RawStatus | null;
+  engineLoading: { percent: number; remaining_s: number; elapsed_s: number } | null;
+  hotkey: string;
+  dictationMode: "toggle" | "hold";
   models: ModelItem[];
   progress: Record<string, DownloadProgress>;
   lastError: string | null;
   setConnection: (state: ConnectionState, error: string | null) => void;
   setSnapshot: (snapshot: Record<string, unknown>) => void;
   refreshStatus: () => Promise<void>;
+  refreshConfig: () => Promise<void>;
   applyCoreEvent: (name: string, payload: Record<string, unknown>) => void;
   refreshModels: () => Promise<void>;
   download: (modelId: string) => Promise<void>;
@@ -105,6 +109,9 @@ export const useControlStore = create<ControlState>((set, get) => ({
   connectionError: null,
   snapshot: null,
   status: null,
+  engineLoading: null,
+  hotkey: "Alt+S",
+  dictationMode: "toggle",
   models: [],
   progress: {},
   lastError: null,
@@ -121,9 +128,41 @@ export const useControlStore = create<ControlState>((set, get) => ({
     }
   },
 
+  refreshConfig: async () => {
+    const reply = await coreCommand("config.get");
+    if (reply.kind === "response" && reply.payload) {
+      const input = (reply.payload.config as Record<string, unknown>)
+        ?.input as Record<string, unknown> | undefined;
+      set({
+        hotkey: (input?.hotkey as string) ?? "Alt+S",
+        dictationMode: ((input?.mode as string) ?? "toggle") as
+          | "toggle"
+          | "hold",
+      });
+    }
+  },
+
   applyCoreEvent: (name, payload) => {
     if (name === "dictation.state_changed" || name === "core.notice") {
       void get().refreshStatus();
+    }
+    if (name === "config.changed") {
+      void get().refreshConfig();
+    }
+    if (name === "asr.engine_loading") {
+      const percent = (payload.percent as number) ?? 0;
+      if (percent >= 100) {
+        set({ engineLoading: null });
+        void get().refreshStatus();
+      } else {
+        set({
+          engineLoading: {
+            percent,
+            remaining_s: (payload.remaining_s as number) ?? 0,
+            elapsed_s: (payload.elapsed_s as number) ?? 0,
+          },
+        });
+      }
     }
     if (name === "model.progress") {
       const progress = payload as unknown as DownloadProgress;

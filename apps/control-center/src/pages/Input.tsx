@@ -93,6 +93,7 @@ export default function Input() {
   const [script, setScript] = useState<OutputScript>("simplified");
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
+  const [capturing, setCapturing] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -115,7 +116,35 @@ export default function Input() {
     setSaving(false);
     if (reply.kind === "response") {
       setSavedTick((tick) => tick + 1);
+      void useControlStore.getState().refreshConfig();
     }
+  };
+
+  // Capture a real key combo: read modifiers + the main key from a keydown,
+  // build a "Ctrl+Alt+D"-style string the engine parser accepts.
+  const captureHotkey = (event: React.KeyboardEvent) => {
+    event.preventDefault();
+    const key = event.key;
+    // Ignore lone modifier presses; wait for the main key.
+    if (["Control", "Alt", "Shift", "Meta", "OS"].includes(key)) {
+      return;
+    }
+    const mods: string[] = [];
+    if (event.ctrlKey) mods.push("Ctrl");
+    if (event.altKey) mods.push("Alt");
+    if (event.shiftKey) mods.push("Shift");
+    if (event.metaKey) mods.push("Super");
+    if (mods.length === 0) {
+      return; // require at least one modifier so it doesn't eat plain typing
+    }
+    let main = key;
+    if (key === " ") main = "Space";
+    else if (key.length === 1) main = key.toUpperCase();
+    else return; // function/arrow keys etc. unsupported by the engine parser
+    const combo = [...mods, main].join("+");
+    setHotkey(combo);
+    setCapturing(false);
+    void save({ input: { hotkey: combo } });
   };
 
   return (
@@ -123,7 +152,7 @@ export default function Input() {
       <PageHead
         index="02"
         title="输入"
-        desc="听写快捷键与语音识别后端;切换在下一次听写时生效。"
+        desc="听写快捷键、模式与语音识别后端;快捷键/模式即时生效,后端切换在下次听写生效。"
       />
       {lastError ? <div className="error-banner">{lastError}</div> : null}
 
@@ -131,20 +160,16 @@ export default function Input() {
         <div className="panel-label">快捷键与模式</div>
         <div className="row" style={{ marginBottom: 12 }}>
           <span className="telemetry">
-            <span className="k">听写快捷键(可自定义,如 Ctrl+Alt+D)</span>
+            <span className="k">听写快捷键</span>
             <span className="v glow">{hotkey}</span>
           </span>
-          <input
-            className="vf"
-            style={{ width: 140 }}
-            value={hotkey}
-            onChange={(event) => setHotkey(event.target.value)}
-          />
           <button
-            className="vf ghost"
-            onClick={() => void save({ input: { hotkey } })}
+            className={`vf ${capturing ? "" : "ghost"}`}
+            onKeyDown={capturing ? captureHotkey : undefined}
+            onClick={() => setCapturing(true)}
+            onBlur={() => setCapturing(false)}
           >
-            保存快捷键
+            {capturing ? "请按下快捷键…(需含 Ctrl/Alt/Shift/Super)" : "点击录制快捷键"}
           </button>
         </div>
         <label className={`choice ${mode === "toggle" ? "selected" : ""}`}>
@@ -178,7 +203,7 @@ export default function Input() {
           </div>
         </label>
         <p className="hint" style={{ margin: "6px 0 0" }}>
-          修改后在下一次窗口聚焦时生效。
+          快捷键与模式即时生效(下一次按键起);录制时请按含 Ctrl/Alt/Shift/Super 的组合。
         </p>
       </section>
 

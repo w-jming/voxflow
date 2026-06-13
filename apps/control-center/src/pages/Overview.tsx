@@ -15,11 +15,19 @@ const STATE_LABEL: Record<string, string> = {
   error: "异常",
 };
 
+const FRONTEND_LABEL: Record<string, string> = {
+  not_installed: "未启用(请切换到 VoxFlow 输入源)",
+  connected: "已连接",
+  active: "使用中",
+};
+
 export default function Overview() {
   const connection = useControlStore((state) => state.connection);
   const connectionError = useControlStore((state) => state.connectionError);
   const status = useControlStore((state) => state.status);
   const refreshStatus = useControlStore((state) => state.refreshStatus);
+  const engineLoading = useControlStore((state) => state.engineLoading);
+  const hotkey = useControlStore((state) => state.hotkey);
 
   useEffect(() => {
     if (connection === "connected") {
@@ -30,6 +38,7 @@ export default function Overview() {
   const dictation = status?.dictation?.state ?? "idle";
   const engine = status?.models?.engine_state ?? "—";
   const backend = status?.models?.asr_backend ?? "—";
+  const frontend = status?.frontend?.state ?? "—";
   const uptime = status?.core?.uptime_ms
     ? `${Math.floor((status.core.uptime_ms as number) / 60000)} min`
     : "—";
@@ -56,8 +65,24 @@ export default function Overview() {
             color: "var(--vf-warn)",
           }}
         >
-          识别引擎{engine === "loading" ? "正在加载(约 1-2 分钟)" : `状态:${engine}`}
-          ,此期间听写不可用。
+          {engine === "loading" || engineLoading ? (
+            <>
+              <div style={{ marginBottom: 8 }}>
+                识别引擎加载中,此期间听写不可用
+                {engineLoading
+                  ? ` · 已用 ${engineLoading.elapsed_s}s · 预计剩余 ${engineLoading.remaining_s}s`
+                  : "(约 1-2 分钟)"}
+              </div>
+              <div className="progress-track">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${engineLoading?.percent ?? 5}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            `识别引擎状态:${engine},此期间听写不可用。`
+          )}
         </div>
       ) : null}
 
@@ -72,7 +97,8 @@ export default function Overview() {
               {STATE_LABEL[dictation] ?? dictation}
             </div>
             <div className="muted">
-              Alt+S 开始/停止 · 当前后端 {BACKEND_LABEL[backend] ?? backend}
+              <b className="mono">{hotkey}</b> 开始/停止 · 当前后端{" "}
+              {BACKEND_LABEL[backend] ?? backend}
             </div>
           </div>
         </div>
@@ -103,7 +129,7 @@ export default function Overview() {
           </div>
           <div className="telemetry">
             <span className="k">输入法前端</span>
-            <span className="v">{status?.frontend?.state ?? "—"}</span>
+            <span className="v">{FRONTEND_LABEL[frontend] ?? frontend}</span>
           </div>
           <div className="telemetry">
             <span className="k">Zipformer 当前模型</span>
@@ -115,7 +141,7 @@ export default function Overview() {
       <section className="panel">
         <div className="panel-label">快速上手</div>
         <p className="muted" style={{ margin: 0 }}>
-          ① 引擎状态 ready 后,在任意输入框按 <b className="mono">Alt+S</b>{" "}
+          ① 引擎状态 ready 后,在任意输入框按 <b className="mono">{hotkey}</b>{" "}
           开始听写;再按一次结束。 ② 输入源需切换到「VoxFlow / 声流输入法」
           (Super+Space)。 ③ 后端与模型可在托盘图标或「输入」「模型」页切换。
         </p>
