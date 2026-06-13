@@ -83,19 +83,28 @@ struct SidecarProcess {
 
 impl SidecarProcess {
     fn spawn(options: &Qwen3SidecarOptions) -> Result<Self> {
-        let mut child = Command::new(&options.python)
+        let mut command = Command::new(&options.python);
+        command
             .arg(&options.sidecar_script)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .with_context(|| {
-                format!(
-                    "spawn qwen3 sidecar: {} {}",
-                    options.python,
-                    options.sidecar_script.display()
-                )
-            })?;
+            .stderr(Stdio::inherit());
+        // Own process group: a Ctrl+C aimed at the host must not SIGINT the
+        // sidecar mid-flight (an interrupted python skips vLLM's atexit and
+        // orphans the EngineCore child holding ~10GB of VRAM). With stdin
+        // closed on our exit the sidecar shuts down cleanly instead.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        let mut child = command.spawn().with_context(|| {
+            format!(
+                "spawn qwen3 sidecar: {} {}",
+                options.python,
+                options.sidecar_script.display()
+            )
+        })?;
         let stdin = child.stdin.take().context("sidecar stdin unavailable")?;
         let stdout = BufReader::new(child.stdout.take().context("sidecar stdout unavailable")?);
         Ok(Self {
@@ -133,8 +142,17 @@ impl Drop for SidecarProcess {
     fn drop(&mut self) {
         let _ = self.stdin.write_all(b"{\"cmd\":\"shutdown\"}\n");
         let _ = self.stdin.flush();
+        std::thread::sleep(std::time::Duration::from_millis(300));
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // Sweep the whole process group so vLLM's spawned EngineCore can
+        // never outlive us holding GPU memory.
+        #[cfg(unix)]
+        {
+            let _ = Command::new("kill")
+                .args(["-TERM", "--", &format!("-{}", self.child.id())])
+                .status();
+        }
     }
 }
 
