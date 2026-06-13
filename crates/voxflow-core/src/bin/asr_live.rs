@@ -27,24 +27,57 @@ fn parse_backend(value: &str) -> Result<AsrBackend> {
     })
 }
 
-/// Terminal-safe single-line status: show only the tail and skip no-op
-/// redraws — wrapped lines break \r-based redraw and flood the screen.
-fn draw(status_line: &mut String, label: &str, text: &str) -> Result<()> {
-    let chars: Vec<char> = text.chars().collect();
-    let tail: String = if chars.len() > 90 {
-        std::iter::once('…')
-            .chain(chars[chars.len() - 90..].iter().copied())
-            .collect()
-    } else {
-        text.to_string()
-    };
-    let line = format!("{label}: {tail}");
-    if line != *status_line {
-        print!("\r\x1b[2K{line}");
-        std::io::stdout().flush()?;
-        *status_line = line;
+/// Terminal-safe single-line status renderer: truncates to the real terminal
+/// width (wrapped lines break \r-based redraw and flood the screen) and
+/// skips no-op redraws.
+struct StatusLine {
+    width: usize,
+    last: String,
+}
+
+impl StatusLine {
+    fn new() -> Self {
+        // Resolve columns once; tput works for interactive terminals, 80 is a
+        // safe floor elsewhere. CJK glyphs are ~2 cells wide, so budget half.
+        let width = std::process::Command::new("tput")
+            .arg("cols")
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .and_then(|cols| cols.trim().parse::<usize>().ok())
+            .unwrap_or(80);
+        Self {
+            width,
+            last: String::new(),
+        }
     }
-    Ok(())
+
+    fn budget(&self) -> usize {
+        (self.width.saturating_sub(12) / 2).max(20)
+    }
+
+    fn draw(&mut self, label: &str, text: &str) -> Result<()> {
+        let budget = self.budget();
+        let chars: Vec<char> = text.chars().collect();
+        let tail: String = if chars.len() > budget {
+            std::iter::once('…')
+                .chain(chars[chars.len() - budget..].iter().copied())
+                .collect()
+        } else {
+            text.to_string()
+        };
+        let line = format!("{label}: {tail}");
+        if line != self.last {
+            print!("\r\x1b[2K{line}");
+            std::io::stdout().flush()?;
+            self.last = line;
+        }
+        Ok(())
+    }
+
+    fn newline(&mut self) {
+        self.last.clear();
+    }
 }
 
 fn main() -> Result<()> {
@@ -80,6 +113,10 @@ fn main() -> Result<()> {
         paths.config.display()
     );
 
+    let swept = voxflow_asr_qwen3::sweep_orphaned_engines();
+    if swept > 0 {
+        eprintln!("swept {swept} orphaned vLLM engine process(es) holding GPU memory");
+    }
     eprintln!("building recognizer (qwen3 first session loads the model — wait for it)...");
     let mut recognizer = build_recognizer(&config, &paths)?;
     let session = recognizer.start_session()?;
@@ -94,7 +131,7 @@ fn main() -> Result<()> {
     eprintln!("listening for {seconds}s — speak now (Ctrl+C to stop)\n");
 
     let deadline = Instant::now() + Duration::from_secs(seconds);
-    let mut status_line = String::new();
+    let mut status = StatusLine::new();
     while Instant::now() < deadline {
         let Some(frame) = source.next_frame()? else {
             std::thread::sleep(Duration::from_millis(2));
@@ -103,11 +140,11 @@ fn main() -> Result<()> {
         recognizer.push_audio(&session, frame.frame)?;
         for event in recognizer.poll_events(&session)? {
             match event {
-                AsrEvent::Partial { text, .. } => draw(&mut status_line, "partial", &text)?,
-                AsrEvent::Stable { text, .. } => draw(&mut status_line, "stable ", &text)?,
+                AsrEvent::Partial { text, .. } => status.draw("partial", &text)?,
+                AsrEvent::Stable { text, .. } => status.draw("stable ", &text)?,
                 AsrEvent::Final { text, .. } => {
                     println!("\r\x1b[2Kfinal  : {text}");
-                    status_line.clear();
+                    status.newline();
                 }
             }
         }

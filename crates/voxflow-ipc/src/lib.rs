@@ -150,6 +150,9 @@ pub struct AudioInfo {
 pub struct ModelInfo {
     #[serde(default)]
     pub asr_backend: Option<String>,
+    /// ASR 引擎驻留状态:idle | loading | ready | error:<msg>
+    #[serde(default)]
+    pub engine_state: Option<String>,
     pub active_asr: String,
     pub active_refiner: Option<String>,
     pub intent_classifier: IntentClassifierInfo,

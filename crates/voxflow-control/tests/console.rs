@@ -55,6 +55,7 @@ fn connected_ready_status_aggregates_to_input_available() {
         },
         models: ModelInfo {
             asr_backend: Some("mock".to_string()),
+            engine_state: Some("ready".to_string()),
             active_asr: "streaming-zh-en-small".to_string(),
             active_refiner: None,
             intent_classifier: IntentClassifierInfo {

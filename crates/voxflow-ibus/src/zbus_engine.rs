@@ -8,11 +8,25 @@ use zbus::{
 use crate::core_client::IbusCoreBridge;
 use crate::engine::IbusOperation;
 
+const IBUS_RELEASE_MASK: u32 = 1 << 30;
+const IBUS_MOD1_MASK: u32 = 1 << 3;
+const KEYVAL_LOWER_S: u32 = 0x73;
+const KEYVAL_UPPER_S: u32 = 0x53;
+
+/// `Some(is_press)` when the event is the Alt+S dictation hotkey (D-14),
+/// `None` for any other key.
+fn hotkey_match(keyval: u32, state: u32) -> Option<bool> {
+    let alt_held = state & IBUS_MOD1_MASK != 0;
+    let is_s = keyval == KEYVAL_LOWER_S || keyval == KEYVAL_UPPER_S;
+    (alt_held && is_s).then_some(state & IBUS_RELEASE_MASK == 0)
+}
+
 #[derive(Default)]
 pub struct ZbusIbusEngine {
     frontend_events: Vec<FrontendEvent>,
     capabilities_mask: u32,
     pending_operations: Vec<IbusOperation>,
+    listening: bool,
     #[allow(clippy::type_complexity)]
     core_bridge: Option<Box<dyn IbusCoreBridge>>,
 }
@@ -100,6 +114,17 @@ impl ZbusIbusEngine {
         ctxt: &SignalContext<'_>,
         operations: &[IbusOperation],
     ) -> zbus::fdo::Result<()> {
+        emit_operations_via(ctxt, operations)
+    }
+}
+
+/// Emits IBus engine signals for projected operations; shared between the
+/// method-call path and the core event pump thread.
+pub(crate) fn emit_operations_via(
+    ctxt: &SignalContext<'_>,
+    operations: &[IbusOperation],
+) -> zbus::fdo::Result<()> {
+    {
         for operation in operations {
             match operation {
                 IbusOperation::UpdatePreeditText {
@@ -108,7 +133,7 @@ impl ZbusIbusEngine {
                     underline,
                 } => {
                     let text = ibus_text_value(text, *underline).map_err(to_fdo_error)?;
-                    block_on(Self::update_preedit_text(
+                    block_on(ZbusIbusEngine::update_preedit_text(
                         ctxt,
                         &text,
                         *cursor_pos as u32,
@@ -118,10 +143,11 @@ impl ZbusIbusEngine {
                 }
                 IbusOperation::CommitText { text } => {
                     let text = ibus_text_value(text, false).map_err(to_fdo_error)?;
-                    block_on(Self::commit_text(ctxt, &text)).map_err(to_fdo_error_display)?;
+                    block_on(ZbusIbusEngine::commit_text(ctxt, &text))
+                        .map_err(to_fdo_error_display)?;
                 }
                 IbusOperation::DeleteSurroundingText { chars } => {
-                    block_on(Self::delete_surrounding_text(
+                    block_on(ZbusIbusEngine::delete_surrounding_text(
                         ctxt,
                         -(*chars as i32),
                         *chars as u32,
@@ -130,7 +156,7 @@ impl ZbusIbusEngine {
                 }
                 IbusOperation::ClearPreedit => {
                     let text = ibus_text_value("", false).map_err(to_fdo_error)?;
-                    block_on(Self::update_preedit_text(ctxt, &text, 0, false))
+                    block_on(ZbusIbusEngine::update_preedit_text(ctxt, &text, 0, false))
                         .map_err(to_fdo_error_display)?;
                 }
                 IbusOperation::SessionStarted | IbusOperation::SessionStopped => {}
@@ -144,10 +170,10 @@ impl ZbusIbusEngine {
 impl ZbusIbusEngine {
     fn focus_in(
         &mut self,
-        #[zbus(signal_context)] ctxt: SignalContext<'_>,
+        #[zbus(signal_context)] _ctxt: SignalContext<'_>,
     ) -> zbus::fdo::Result<()> {
-        self.report(FrontendEvent::Focused { app_hint: None })?;
-        self.start_dictation(&ctxt)
+        // Dictation is hotkey-driven (Alt+S, D-14); focus only reports state.
+        self.report(FrontendEvent::Focused { app_hint: None })
     }
 
     fn focus_out(
@@ -155,7 +181,11 @@ impl ZbusIbusEngine {
         #[zbus(signal_context)] ctxt: SignalContext<'_>,
     ) -> zbus::fdo::Result<()> {
         self.report(FrontendEvent::Blurred)?;
-        self.stop_dictation(&ctxt)
+        if self.listening {
+            self.listening = false;
+            return self.stop_dictation(&ctxt);
+        }
+        Ok(())
     }
 
     fn enable(&mut self) -> zbus::fdo::Result<()> {
@@ -172,11 +202,25 @@ impl ZbusIbusEngine {
 
     fn process_key_event(
         &mut self,
-        _keyval: u32,
+        #[zbus(signal_context)] ctxt: SignalContext<'_>,
+        keyval: u32,
         _keycode: u32,
-        _state: u32,
+        state: u32,
     ) -> zbus::fdo::Result<bool> {
-        Ok(false)
+        let Some(is_press) = hotkey_match(keyval, state) else {
+            return Ok(false);
+        };
+        // Consume both edges of Alt+S; act on press only (D-14 toggle).
+        if is_press {
+            if self.listening {
+                self.listening = false;
+                self.stop_dictation(&ctxt)?;
+            } else {
+                self.listening = true;
+                self.start_dictation(&ctxt)?;
+            }
+        }
+        Ok(true)
     }
 
     fn set_cursor_location(
@@ -366,9 +410,21 @@ mod tests {
     }
 
     #[test]
+    fn alt_s_press_matches_hotkey_and_other_keys_pass_through() {
+        assert_eq!(hotkey_match(KEYVAL_LOWER_S, IBUS_MOD1_MASK), Some(true));
+        assert_eq!(
+            hotkey_match(KEYVAL_UPPER_S, IBUS_MOD1_MASK | IBUS_RELEASE_MASK),
+            Some(false)
+        );
+        assert_eq!(hotkey_match(0x61, IBUS_MOD1_MASK), None); // Alt+A
+        assert_eq!(hotkey_match(KEYVAL_LOWER_S, 0), None); // bare s
+    }
+
+    #[test]
+    #[ignore = "superseded: key handling now requires a SignalContext; logic covered above"]
     fn process_key_event_is_not_handled_by_poc_engine() {
-        let mut engine = ZbusIbusEngine::default();
-        assert!(!engine.process_key_event(0, 0, 0).unwrap());
+        let engine = ZbusIbusEngine::default();
+        let _ = engine;
     }
 
     #[test]

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { PageHead } from "../App";
 import {
   useControlStore,
   type DownloadProgress,
@@ -22,8 +23,7 @@ function phaseLabel(progress: DownloadProgress): string {
       const speed = progress.speed_bps
         ? `${(progress.speed_bps / 1024 / 1024).toFixed(1)} MB/s`
         : "";
-      const eta = progress.eta_s ? `剩余 ${progress.eta_s}s` : "";
-      return `下载中 ${pct}% ${speed} ${eta}`;
+      return `下载中 ${pct}% ${speed} ${progress.eta_s ? `剩余 ${progress.eta_s}s` : ""}`;
     }
     case "verifying":
       return "校验中…";
@@ -36,7 +36,7 @@ function phaseLabel(progress: DownloadProgress): string {
   }
 }
 
-function ModelCard({ model }: { model: ModelItem }) {
+function ZipformerCard({ model }: { model: ModelItem }) {
   const progress = useControlStore((state) => state.progress[model.profile.id]);
   const download = useControlStore((state) => state.download);
   const pause = useControlStore((state) => state.pause);
@@ -49,27 +49,27 @@ function ModelCard({ model }: { model: ModelItem }) {
   const busy =
     progress &&
     ["downloading", "verifying", "installing"].includes(progress.phase);
-  const badge = busy ? progress.phase : state;
   const pct =
     progress?.total && progress.downloaded
       ? Math.min(100, (progress.downloaded / progress.total) * 100)
       : 0;
 
   return (
-    <div className="card">
+    <section className="panel">
       <div className="row">
         <div className="grow">
           <strong>{model.profile.label}</strong>{" "}
           {model.profile.recommended ? (
-            <span className="badge active">推荐</span>
+            <span className="badge accent">推荐</span>
           ) : null}
-          <div className="muted">
+          <div className="muted mono" style={{ marginTop: 2 }}>
             {id} · {model.profile.languages.join("/")} ·{" "}
-            {formatBytes(model.source.size_bytes)} · {model.profile.license} ·
-            最低内存 {model.profile.min_ram_mb} MB
+            {formatBytes(model.source.size_bytes)} · {model.profile.license}
           </div>
         </div>
-        <span className={`badge ${badge}`}>{badge}</span>
+        <span className={`badge ${busy ? progress.phase : state}`}>
+          {busy ? progress.phase : state}
+        </span>
       </div>
 
       {busy ? (
@@ -77,7 +77,7 @@ function ModelCard({ model }: { model: ModelItem }) {
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${pct}%` }} />
           </div>
-          <div className="muted" style={{ marginTop: 4 }}>
+          <div className="muted mono" style={{ marginTop: 4 }}>
             {phaseLabel(progress)}
           </div>
         </div>
@@ -101,7 +101,7 @@ function ModelCard({ model }: { model: ModelItem }) {
         ) : null}
         {busy && progress.phase === "downloading" ? (
           <>
-            <button className="vf secondary" onClick={() => void pause(id)}>
+            <button className="vf ghost" onClick={() => void pause(id)}>
               暂停
             </button>
             <button className="vf danger" onClick={() => void cancel(id)}>
@@ -111,7 +111,7 @@ function ModelCard({ model }: { model: ModelItem }) {
         ) : null}
         {state === "ready" ? (
           <button className="vf" onClick={() => void activate(id)}>
-            设为当前模型
+            设为 Zipformer 当前模型
           </button>
         ) : null}
         {state === "ready" || state === "broken" ? (
@@ -120,7 +120,7 @@ function ModelCard({ model }: { model: ModelItem }) {
           </button>
         ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -135,12 +135,11 @@ function LocalImport() {
   const [mode, setMode] = useState<"copy" | "symlink">("copy");
 
   return (
-    <div className="card">
-      <strong>导入本地模型</strong>
-      <div className="muted" style={{ margin: "4px 0 10px" }}>
-        选择目标 profile 与本地模型目录;导入时按 profile 的 sha256
-        清单逐文件校验,校验不通过会拒绝导入。
-      </div>
+    <section className="panel">
+      <div className="panel-label">导入本地模型</div>
+      <p className="muted" style={{ marginTop: 0 }}>
+        按 profile 的 sha256 清单逐文件校验,不通过即拒绝导入。
+      </p>
       <div className="row">
         <select
           className="vf"
@@ -156,14 +155,16 @@ function LocalImport() {
         </select>
         <input
           className="vf grow"
-          placeholder="本地模型目录绝对路径,如 /home/you/models/zipformer"
+          placeholder="本地模型目录绝对路径"
           value={path}
           onChange={(event) => setPath(event.target.value)}
         />
         <select
           className="vf"
           value={mode}
-          onChange={(event) => setMode(event.target.value as "copy" | "symlink")}
+          onChange={(event) =>
+            setMode(event.target.value as "copy" | "symlink")
+          }
         >
           <option value="copy">复制</option>
           <option value="symlink">软链接</option>
@@ -176,31 +177,120 @@ function LocalImport() {
           校验并导入
         </button>
       </div>
-    </div>
+    </section>
   );
 }
+
+type Tab = "streaming" | "cloud" | "refine";
 
 export default function Models() {
   const models = useControlStore((state) => state.models);
   const lastError = useControlStore((state) => state.lastError);
+  const status = useControlStore((state) => state.status);
+  const refreshModels = useControlStore((state) => state.refreshModels);
+  const refreshStatus = useControlStore((state) => state.refreshStatus);
+  const [tab, setTab] = useState<Tab>("streaming");
+
+  useEffect(() => {
+    void refreshModels();
+    void refreshStatus();
+  }, [refreshModels, refreshStatus]);
+
+  const backend = status?.models?.asr_backend ?? "";
+  const engine = status?.models?.engine_state ?? "—";
 
   return (
     <div>
-      <h2>模型管理</h2>
-      <p className="muted">
-        模型仅安装到用户数据目录(VOXFLOW_HOME,默认 ~/.voxflow/models),
-        不写入系统目录;下载支持断点续传与 sha256 校验。
-      </p>
+      <PageHead
+        index="03"
+        title="模型"
+        desc="按用途分组管理;「当前使用」由输入页/托盘选择的后端决定。"
+      />
       {lastError ? <div className="error-banner">{lastError}</div> : null}
-      {models.map((model) => (
-        <ModelCard key={model.profile.id} model={model} />
-      ))}
-      {models.length === 0 ? (
-        <div className="card muted">
-          未读取到模型列表(Core 未连接或 profile 目录为空)。
-        </div>
+
+      <div className="tabs">
+        <button
+          className={`tab ${tab === "streaming" ? "active" : ""}`}
+          onClick={() => setTab("streaming")}
+        >
+          实时流式
+        </button>
+        <button
+          className={`tab ${tab === "cloud" ? "active" : ""}`}
+          onClick={() => setTab("cloud")}
+        >
+          云端 API
+        </button>
+        <button
+          className={`tab ${tab === "refine" ? "active" : ""}`}
+          onClick={() => setTab("refine")}
+        >
+          精修(规划)
+        </button>
+      </div>
+
+      {tab === "streaming" ? (
+        <>
+          <section className="panel">
+            <div className="row">
+              <div className="grow">
+                <strong>Qwen3-ASR-1.7B</strong>{" "}
+                <span className="badge accent">默认后端</span>{" "}
+                {backend === "qwen3_vllm" ? (
+                  <span className="badge ok">当前使用</span>
+                ) : null}
+                <div className="muted mono" style={{ marginTop: 2 }}>
+                  vLLM · GPU 常驻 · zh/en + 30 语言 · Apache-2.0 · ~3.4 GB
+                </div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  权重由部署脚本经 Hugging Face 缓存管理(纳入统一下载链路在
+                  todo);驻留状态:
+                  <span className={`badge ${engine}`}>{engine}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+          {models.map((model) => (
+            <ZipformerCard key={model.profile.id} model={model} />
+          ))}
+          <LocalImport />
+        </>
       ) : null}
-      <LocalImport />
+
+      {tab === "cloud" ? (
+        <section className="panel">
+          <div className="row">
+            <div className="grow">
+              <strong>火山引擎 大模型流式语音识别</strong>{" "}
+              {backend === "volcano_api" ? (
+                <span className="badge ok">当前使用</span>
+              ) : null}
+              <div className="muted" style={{ marginTop: 4 }}>
+                无本地权重;在「输入」页配置 APP ID / Access Token 后切换。
+                <br />
+                <span style={{ color: "var(--vf-warn)" }}>
+                  ⚠ 该路径未经真实服务验证(暂无测试密钥)。
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === "refine" ? (
+        <section className="panel">
+          <div className="row">
+            <div className="grow">
+              <strong>Qwen3-ASR-0.6B(final 精修层)</strong>{" "}
+              <span className="badge">规划中</span>
+              <div className="muted" style={{ marginTop: 4 }}>
+                停顿后异步精修已上屏文本,经账本安全门替换(D-9/D-21,
+                sherpa-onnx 离线包 2026-03-25);下一批次接入。
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

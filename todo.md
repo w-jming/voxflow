@@ -76,6 +76,12 @@ mock 链路已就绪,这一步只差真实环境,且能提前暴露 zbus 信号�
 - [ ] core 流水线真实音频泵接入(dictation.start 后 PipeWire→VAD→recognizer 持续推流;当前 IPC 层已按后端构建识别器,但听写音频循环仍待接)。
 - [ ] 🆕 **所有者硬性验收(2026-06-12):按下快捷键必须即刻进入听写,不得有加载/预热等待**。实现要求:① daemon 启动时后台**预载 + 预热** Qwen3 sidecar(一次性 1-2 分钟,登录时无感完成),模型常驻显存(~9.4GB,D-22 取舍);② sidecar 跨会话复用已实现(有 UT),Alt+S → start_session 为毫秒级;③ 可选:空闲 N 分钟自动卸载省显存、再按键时重载(默认关闭,作为设置项);④ 验收口径:热路径"按键→可听写"< 200ms。注:asr-live 每次冷启动是测试工具行为,与产品形态无关。
 
+### 输入法链路遗留(2026-06-12 本批次发现)
+
+- [ ] IBus 引擎**免 sudo 自注册**:IBus 1.5.29 不扫描用户组件目录;改为引擎进程连 IBus 私有总线(地址经 `ibus address`)调用 `RegisterComponent` 运行时注册 + 在该连接上服务 factory;部署脚本随 core 一起常驻启动引擎。当前过渡:一条 sudo cp 安装组件 XML。
+- [ ] 真实听写流水线接语义修正:pump 的 Final 暂未过账本/安全门(runtime.rs 注记);需把 project_final_event 路径接入 pump 事件流。
+- [ ] 控制中心前端已用 frontend-design 插件重构(暗色“声学仪器”系统);后续页面迭代继续使用该插件。
+
 ### GPU 优先与 2026 模型(D-21,2026-06-11 新增;调研见 `docs/redesign/architecture/model-research-2026.md`)
 
 - [ ] sherpa-onnx CUDA EP 接入调研(sherpa-rs `cuda` feature 与 GPU 预编译库分发),P0 zipformer 链路 GPU 加速实测。

@@ -12,14 +12,19 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DEPLOY_DIR="${VOXFLOW_DEPLOY_DIR:-$HOME/software/voxflow}"
 export PATH="$HOME/.cargo/bin:$PATH"
 
-echo "==> building release binaries"
-cargo build --release -p voxflow-core -p voxflow-control-center
+echo "==> building release binaries (live-asr: PipeWire 音频泵 + 常驻引擎)"
+if ! pkg-config --exists libpipewire-0.3 2>/dev/null; then
+  # shellcheck disable=SC1091
+  source "$REPO_DIR/scripts/dev/pipewire-env.sh"
+fi
+cargo build --release -p voxflow-core --features live-asr -p voxflow-control-center -p voxflow-ibus
 ( cd "$REPO_DIR/apps/control-center" && npm run build >/dev/null )
 
 echo "==> installing to $DEPLOY_DIR"
 mkdir -p "$DEPLOY_DIR/bin" "$DEPLOY_DIR/sidecar"
 install -m 755 "$REPO_DIR/target/release/voxflow-core" "$DEPLOY_DIR/bin/"
 install -m 755 "$REPO_DIR/target/release/voxflow-control-center" "$DEPLOY_DIR/bin/"
+install -m 755 "$REPO_DIR/target/release/voxflow-ibus" "$DEPLOY_DIR/bin/"
 # sherpa 动态库($ORIGIN rpath,zipformer 兜底后端需要)
 for lib in "$REPO_DIR"/target/release/*.so; do
   [ -f "$lib" ] && install -m 644 "$lib" "$DEPLOY_DIR/bin/"
@@ -89,5 +94,8 @@ cat > "$DEPLOY_DIR/README.md" <<'EOF'
 权重缓存:~/.cache/huggingface(Qwen3-ASR-1.7B 已预下载)。
 配置与日志:~/.voxflow/。
 EOF
+
+echo "==> installing IBus engine into the user session"
+bash "$REPO_DIR/scripts/install-ibus-user.sh" "$DEPLOY_DIR/bin/voxflow-ibus" || true
 
 echo "==> done: $DEPLOY_DIR"

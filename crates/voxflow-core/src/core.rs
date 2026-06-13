@@ -21,6 +21,16 @@ use crate::model::{
 };
 use crate::paths::VoxflowPaths;
 use crate::recognizer::{AsrEvent, MockRecognizer, SessionId, StreamingRecognizer};
+
+/// Shared recognizer slot: the IPC layer and the live audio pump take short
+/// std-mutex locks on it independently (D-22 resident engine).
+pub type EngineSlot = std::sync::Arc<std::sync::Mutex<Option<Box<dyn StreamingRecognizer>>>>;
+
+/// Handle to a running dictation audio pump (live-asr feature).
+pub struct PumpHandle {
+    pub stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub join: Option<std::thread::JoinHandle<()>>,
+}
 use voxflow_audio::list_input_devices;
 
 #[derive(Debug)]
@@ -41,8 +51,10 @@ pub struct VoxflowCore {
     frontend_state: FrontendState,
     frontend_capabilities: Vec<String>,
     frontend_surrounding_tail: Option<String>,
-    recognizer: Box<dyn StreamingRecognizer>,
+    engine: EngineSlot,
     recognizer_backend: Option<crate::config::AsrBackend>,
+    engine_state: String,
+    pump: Option<PumpHandle>,
     correction_ledger: InjectionLedger,
     correction_classifier: RuleIntentClassifier,
     correction_gate: SafetyGate,
@@ -67,8 +79,12 @@ impl VoxflowCore {
             frontend_state: FrontendState::NotInstalled,
             frontend_capabilities: Vec::new(),
             frontend_surrounding_tail: None,
-            recognizer: Box::new(MockRecognizer::default()),
+            engine: std::sync::Arc::new(std::sync::Mutex::new(Some(Box::new(
+                MockRecognizer::default(),
+            )))),
             recognizer_backend: None,
+            engine_state: "idle".to_string(),
+            pump: None,
             correction_ledger: InjectionLedger::default(),
             correction_classifier: RuleIntentClassifier,
             correction_gate: SafetyGate,
@@ -97,8 +113,12 @@ impl VoxflowCore {
             frontend_state: FrontendState::NotInstalled,
             frontend_capabilities: Vec::new(),
             frontend_surrounding_tail: None,
-            recognizer: Box::new(MockRecognizer::default()),
+            engine: std::sync::Arc::new(std::sync::Mutex::new(Some(Box::new(
+                MockRecognizer::default(),
+            )))),
             recognizer_backend: None,
+            engine_state: "idle".to_string(),
+            pump: None,
             correction_ledger: InjectionLedger::default(),
             correction_classifier: RuleIntentClassifier,
             correction_gate: SafetyGate,
@@ -111,8 +131,35 @@ impl VoxflowCore {
 
     pub fn set_mock_script(&mut self, script: Vec<AsrEvent>) {
         self.config.asr.backend = crate::config::AsrBackend::Mock;
-        self.recognizer = Box::new(MockRecognizer::with_script(script));
+        *self.engine.lock().expect("engine slot") =
+            Some(Box::new(MockRecognizer::with_script(script)));
         self.recognizer_backend = Some(crate::config::AsrBackend::Mock);
+    }
+
+    pub fn engine_slot(&self) -> EngineSlot {
+        self.engine.clone()
+    }
+
+    pub fn config_clone(&self) -> Config {
+        self.config.clone()
+    }
+
+    pub fn paths_clone(&self) -> VoxflowPaths {
+        self.paths.clone()
+    }
+
+    pub fn event_sender_clone(&self) -> Option<tokio::sync::broadcast::Sender<Envelope>> {
+        self.event_sender.clone()
+    }
+
+    pub fn set_engine_state(&mut self, state: impl Into<String>) {
+        self.engine_state = state.into();
+    }
+
+    /// Called by the preload thread once the engine is resident and warm.
+    pub fn mark_engine_ready(&mut self, backend: crate::config::AsrBackend) {
+        self.recognizer_backend = Some(backend);
+        self.engine_state = "ready".to_string();
     }
 
     /// Rebuilds the recognizer when the configured backend changed (D-22).
@@ -121,8 +168,13 @@ impl VoxflowCore {
         if self.recognizer_backend == Some(desired) {
             return Ok(());
         }
-        self.recognizer = crate::backend::build_recognizer(&self.config, &self.paths)?;
+        if self.engine_state == "loading" {
+            anyhow::bail!("ASR 引擎正在加载,请稍候");
+        }
+        let recognizer = crate::backend::build_recognizer(&self.config, &self.paths)?;
+        *self.engine.lock().expect("engine slot") = Some(recognizer);
         self.recognizer_backend = Some(desired);
+        self.engine_state = "ready".to_string();
         Ok(())
     }
 
@@ -147,6 +199,7 @@ impl VoxflowCore {
                 asr_backend: Some(
                     crate::backend::backend_label(self.config.asr.backend).to_string(),
                 ),
+                engine_state: Some(self.engine_state.clone()),
                 active_asr: self.config.models.active_asr.clone(),
                 active_refiner: self.config.models.active_refiner.clone(),
                 intent_classifier: IntentClassifierInfo {
@@ -573,8 +626,22 @@ impl VoxflowCore {
             );
         }
         self.dictation_state = DictationState::Listening;
-        let session = match self.recognizer.start_session() {
-            Ok(session) => session,
+        let started = {
+            let mut engine = self.engine.lock().expect("engine slot");
+            match engine.as_mut() {
+                Some(recognizer) => recognizer.start_session().map(|session| {
+                    let events = if self.config.asr.backend == crate::config::AsrBackend::Mock {
+                        recognizer.poll_events(&session).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    (session, events)
+                }),
+                None => Err(anyhow::anyhow!("engine slot is empty")),
+            }
+        };
+        let (session, asr_events) = match started {
+            Ok(value) => value,
             Err(error) => {
                 self.dictation_state = DictationState::Error;
                 return self.error(
@@ -587,7 +654,40 @@ impl VoxflowCore {
             }
         };
         self.session_id = Some(session.clone());
-        let asr_events = self.recognizer.poll_events(&session).unwrap_or_default();
+
+        if self.config.asr.backend != crate::config::AsrBackend::Mock {
+            #[cfg(feature = "live-asr")]
+            {
+                if let Some(sender) = self.event_sender.clone() {
+                    self.pump = Some(crate::runtime::spawn_pump(
+                        self.engine.clone(),
+                        sender,
+                        session.clone(),
+                    ));
+                } else {
+                    self.dictation_state = DictationState::Error;
+                    return self.error(
+                        request,
+                        "dictation.audio_unavailable",
+                        "event channel not wired; cannot stream audio",
+                        true,
+                        json!({}),
+                    );
+                }
+            }
+            #[cfg(not(feature = "live-asr"))]
+            {
+                self.dictation_state = DictationState::Error;
+                return self.error(
+                    request,
+                    "dictation.audio_unavailable",
+                    "core was built without the live-asr feature; real dictation unavailable",
+                    true,
+                    json!({}),
+                );
+            }
+        }
+
         let mut outcome = self.respond(request, json!({ "session_id": session }));
         outcome.events.push(Envelope::event(
             "dictation.state_changed",
@@ -602,6 +702,12 @@ impl VoxflowCore {
     }
 
     fn dictation_stop(&mut self, request: Envelope) -> CommandOutcome {
+        if let Some(mut pump) = self.pump.take() {
+            pump.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            if let Some(join) = pump.join.take() {
+                let _ = join.join();
+            }
+        }
         let session = self.session_id.take();
         self.dictation_state = DictationState::Idle;
         let mut outcome = self.respond(request, json!({ "session_id": session }));
@@ -1077,7 +1183,7 @@ fn model_error_code(message: &str) -> &'static str {
     }
 }
 
-fn asr_to_ipc_event(session_id: &str, event: AsrEvent) -> Envelope {
+pub(crate) fn asr_to_ipc_event(session_id: &str, event: AsrEvent) -> Envelope {
     match event {
         AsrEvent::Partial {
             revision,
@@ -1113,7 +1219,7 @@ fn asr_to_ipc_event(session_id: &str, event: AsrEvent) -> Envelope {
     }
 }
 
-fn dictation_final_event(
+pub(crate) fn dictation_final_event(
     session_id: &str,
     revision: u64,
     text: &str,

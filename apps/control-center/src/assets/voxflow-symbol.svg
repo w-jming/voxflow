@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">VoxFlow symbol</title>
+  <desc id="desc">A simplified sky blue horizontal voice wave beside a text cursor.</desc>
+  <rect x="12" y="12" width="104" height="104" rx="28" fill="#F0F9FF" stroke="#BAE6FD" stroke-width="3"/>
+  <path d="M30 66C40 50 52 50 62 66C72 82 84 82 94 66" fill="none" stroke="#0EA5E9" stroke-width="10" stroke-linecap="round"/>
+  <path d="M100 36v56" fill="none" stroke="#0F172A" stroke-width="7" stroke-linecap="round"/>
+  <path d="M91 36h18M91 92h18" fill="none" stroke="#0F172A" stroke-width="7" stroke-linecap="round"/>
+</svg>

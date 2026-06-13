@@ -12,6 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
+use std::borrow::Borrow;
+
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot};
 use voxflow_control::bridge::ReconnectPolicy;
@@ -154,6 +156,173 @@ async fn pump_session(
     }
 }
 
+/// Sends a core command from tray handlers without waiting for the reply.
+fn tray_core_command(queue: &mpsc::Sender<CommandRequest>, name: &str, payload: Value) {
+    let (reply_tx, _reply_rx) = oneshot::channel();
+    let invocation = CoreCommandInvocation {
+        name: name.to_string(),
+        payload,
+    };
+    let _ = queue.try_send((invocation, reply_tx));
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+/// 右上角托盘:状态切换、后端/模型快速切换、打开控制台、退出。
+fn setup_tray(app: &AppHandle, queue: mpsc::Sender<CommandRequest>) -> tauri::Result<()> {
+    use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+    use tauri::tray::TrayIconBuilder;
+
+    let toggle = MenuItem::with_id(
+        app,
+        "toggle-dictation",
+        "开始 / 停止听写 (Alt+S)",
+        true,
+        None::<&str>,
+    )?;
+    let backend_qwen = CheckMenuItem::with_id(
+        app,
+        "backend-qwen3_vllm",
+        "Qwen3-ASR(本地 GPU)",
+        true,
+        true,
+        None::<&str>,
+    )?;
+    let backend_volcano = CheckMenuItem::with_id(
+        app,
+        "backend-volcano_api",
+        "火山引擎 API(云端)",
+        true,
+        false,
+        None::<&str>,
+    )?;
+    let backend_zipformer = CheckMenuItem::with_id(
+        app,
+        "backend-zipformer_local",
+        "Zipformer(本地 CPU)",
+        true,
+        false,
+        None::<&str>,
+    )?;
+    let backend_menu = Submenu::with_items(
+        app,
+        "识别后端",
+        true,
+        &[&backend_qwen, &backend_volcano, &backend_zipformer],
+    )?;
+    let model_bilingual = MenuItem::with_id(
+        app,
+        "model-streaming-zh-en-small",
+        "流式中英双语(标准)",
+        true,
+        None::<&str>,
+    )?;
+    let model_zh = MenuItem::with_id(
+        app,
+        "model-streaming-zh-2025",
+        "流式中文 2025",
+        true,
+        None::<&str>,
+    )?;
+    let model_xl = MenuItem::with_id(
+        app,
+        "model-streaming-zh-xlarge-2025",
+        "流式中文 XLarge",
+        true,
+        None::<&str>,
+    )?;
+    let model_menu = Submenu::with_items(
+        app,
+        "Zipformer 模型(需已安装)",
+        true,
+        &[&model_bilingual, &model_zh, &model_xl],
+    )?;
+    let open_console = MenuItem::with_id(app, "open-console", "打开控制台", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出 VoxFlow", true, None::<&str>)?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &toggle,
+            &PredefinedMenuItem::separator(app)?,
+            &backend_menu,
+            &model_menu,
+            &PredefinedMenuItem::separator(app)?,
+            &open_console,
+            &quit,
+        ],
+    )?;
+
+    let checks = [
+        backend_qwen.clone(),
+        backend_volcano.clone(),
+        backend_zipformer.clone(),
+    ];
+    let dictating = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    TrayIconBuilder::with_id("voxflow")
+        .icon(app.default_window_icon().expect("bundled icon").clone())
+        .tooltip("VoxFlow 声流输入法")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(move |app, event| {
+            let id = event.id().as_ref();
+            match id {
+                "toggle-dictation" => {
+                    let now = !dictating.load(std::sync::atomic::Ordering::Relaxed);
+                    dictating.store(now, std::sync::atomic::Ordering::Relaxed);
+                    let command = if now {
+                        "dictation.start"
+                    } else {
+                        "dictation.stop"
+                    };
+                    tray_core_command(
+                        app.state::<CommandQueue>().0.clone().borrow(),
+                        command,
+                        serde_json::json!({}),
+                    );
+                }
+                "open-console" => show_main_window(app),
+                "quit" => {
+                    tray_core_command(
+                        app.state::<CommandQueue>().0.clone().borrow(),
+                        "dictation.stop",
+                        serde_json::json!({}),
+                    );
+                    app.exit(0);
+                }
+                id if id.starts_with("backend-") => {
+                    let backend = id.trim_start_matches("backend-");
+                    tray_core_command(
+                        app.state::<CommandQueue>().0.clone().borrow(),
+                        "config.update",
+                        serde_json::json!({ "patch": { "asr": { "backend": backend } } }),
+                    );
+                    for check in &checks {
+                        let _ = check.set_checked(check.id().as_ref() == id);
+                    }
+                }
+                id if id.starts_with("model-") => {
+                    let model_id = id.trim_start_matches("model-");
+                    tray_core_command(
+                        app.state::<CommandQueue>().0.clone().borrow(),
+                        "model.activate",
+                        serde_json::json!({ "model_id": model_id }),
+                    );
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+    let _ = queue;
+    Ok(())
+}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -171,8 +340,16 @@ fn main() {
         .invoke_handler(tauri::generate_handler![core_command, resync])
         .setup(move |app| {
             let handle = app.handle().clone();
+            setup_tray(&handle, app.state::<CommandQueue>().0.clone())?;
             tauri::async_runtime::spawn(connection_pump(handle, command_rx));
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // 关窗 = 隐藏到托盘,不退出(托盘「退出」才真正退出)。
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running VoxFlow Control Center");

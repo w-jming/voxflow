@@ -28,6 +28,8 @@ pub async fn serve(core: Arc<Mutex<VoxflowCore>>, socket: &Path) -> Result<()> {
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let (event_tx, _) = broadcast::channel(256);
     core.lock().await.set_event_sender(event_tx.clone());
+    #[cfg(feature = "live-asr")]
+    crate::runtime::spawn_preload(core.clone());
 
     loop {
         tokio::select! {
