@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { PageHead } from "../App";
 import { useControlStore } from "../store";
 
@@ -36,6 +37,26 @@ export default function About() {
           本地优先 · 数据不出本机(云端 API 为显式可选)· token 级真流式 ·
           所有删除经账本安全门 · 模型/日志/配置均存于用户目录。
         </p>
+      </section>
+      <section className="panel">
+        <div className="panel-label">应用控制</div>
+        <div className="row">
+          <button
+            className="vf"
+            onClick={() => void invoke("restart_app_command")}
+          >
+            重启控制中心
+          </button>
+          <button
+            className="vf danger"
+            onClick={() => void invoke("quit_app_command")}
+          >
+            退出应用
+          </button>
+          <span className="hint">
+            退出仅关闭控制中心与听写;Core 守护进程随之停止当前听写会话。
+          </span>
+        </div>
       </section>
       <p className="muted mono">github.com/w-jming/voxflow</p>
     </div>

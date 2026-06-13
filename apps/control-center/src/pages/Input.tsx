@@ -30,10 +30,39 @@ const SCRIPTS: { key: OutputScript; label: string; description: string }[] = [
   { key: "original", label: "原样输出", description: "不转换,保留模型原始简/繁结果。" },
 ];
 
-const QWEN_LANGS: { key: string; label: string; description: string }[] = [
-  { key: "zh", label: "中文(默认)", description: "中文为主,内嵌英文按原文保留;避免整段被翻译成英文。" },
-  { key: "en", label: "英文", description: "以英文转写。" },
-  { key: "", label: "自动检测", description: "由模型判断语言(可能把中文翻译成英文,不推荐)。" },
+// Qwen3-ASR 支持的全部识别语言(英文名为引擎参数值)。
+const QWEN_LANGS: { key: string; label: string }[] = [
+  { key: "Chinese", label: "中文 Chinese(默认)" },
+  { key: "English", label: "英文 English" },
+  { key: "Cantonese", label: "粤语 Cantonese" },
+  { key: "Japanese", label: "日语 Japanese" },
+  { key: "Korean", label: "韩语 Korean" },
+  { key: "Arabic", label: "阿拉伯语 Arabic" },
+  { key: "German", label: "德语 German" },
+  { key: "French", label: "法语 French" },
+  { key: "Spanish", label: "西班牙语 Spanish" },
+  { key: "Portuguese", label: "葡萄牙语 Portuguese" },
+  { key: "Indonesian", label: "印尼语 Indonesian" },
+  { key: "Italian", label: "意大利语 Italian" },
+  { key: "Russian", label: "俄语 Russian" },
+  { key: "Thai", label: "泰语 Thai" },
+  { key: "Vietnamese", label: "越南语 Vietnamese" },
+  { key: "Turkish", label: "土耳其语 Turkish" },
+  { key: "Hindi", label: "印地语 Hindi" },
+  { key: "Malay", label: "马来语 Malay" },
+  { key: "Dutch", label: "荷兰语 Dutch" },
+  { key: "Swedish", label: "瑞典语 Swedish" },
+  { key: "Danish", label: "丹麦语 Danish" },
+  { key: "Finnish", label: "芬兰语 Finnish" },
+  { key: "Polish", label: "波兰语 Polish" },
+  { key: "Czech", label: "捷克语 Czech" },
+  { key: "Filipino", label: "菲律宾语 Filipino" },
+  { key: "Persian", label: "波斯语 Persian" },
+  { key: "Greek", label: "希腊语 Greek" },
+  { key: "Romanian", label: "罗马尼亚语 Romanian" },
+  { key: "Hungarian", label: "匈牙利语 Hungarian" },
+  { key: "Macedonian", label: "马其顿语 Macedonian" },
+  { key: "", label: "自动检测(混说时可能误翻译,不推荐)" },
 ];
 
 const BACKENDS: { key: Backend; label: string; description: string }[] = [
@@ -261,32 +290,30 @@ export default function Input() {
               <div className="muted" style={{ marginBottom: 10 }}>
                 模型 <span className="mono">{asr.qwen3.model}</span> ·
                 守护进程启动时预载并预热,权重缓存于本机,无需联网。
-                <br />
-                修改识别语言需切换后端或重启 Core 后生效。
               </div>
-              {QWEN_LANGS.map(({ key, label, description }) => (
-                <label
-                  key={key || "auto"}
-                  className={`choice ${asr.qwen3.language === key ? "selected" : ""}`}
+              <div className="row">
+                <span className="telemetry">
+                  <span className="k">识别语言(Qwen 支持 30 种)</span>
+                  <span className="muted">
+                    固定语言可避免混说时被误翻译;改动后切换后端或重启 Core 生效。
+                  </span>
+                </span>
+                <select
+                  className="vf"
+                  value={asr.qwen3.language}
+                  onChange={(event) => {
+                    const language = event.target.value;
+                    setAsr({ ...asr, qwen3: { ...asr.qwen3, language } });
+                    void save({ asr: { qwen3: { language } } });
+                  }}
                 >
-                  <input
-                    type="radio"
-                    name="qwen-language"
-                    checked={asr.qwen3.language === key}
-                    onChange={() => {
-                      setAsr({
-                        ...asr,
-                        qwen3: { ...asr.qwen3, language: key },
-                      });
-                      void save({ asr: { qwen3: { language: key } } });
-                    }}
-                  />
-                  <div className="grow">
-                    <div>{label}</div>
-                    <div className="muted">{description}</div>
-                  </div>
-                </label>
-              ))}
+                  {QWEN_LANGS.map(({ key, label }) => (
+                    <option key={key || "auto"} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </section>
           ) : null}
 
