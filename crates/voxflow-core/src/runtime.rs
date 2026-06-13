@@ -18,9 +18,11 @@ use crate::config::AsrBackend;
 use crate::core::{asr_to_ipc_event, dictation_final_event, EngineSlot, PumpHandle, VoxflowCore};
 use crate::ipc::Envelope;
 use crate::recognizer::{AsrEvent, SessionId};
+use crate::text::TextConverter;
 use voxflow_audio::{AudioSource, CaptureConfig, PipeWireAudioSource};
 
-fn project(session: &SessionId, event: AsrEvent) -> Envelope {
+fn project(session: &SessionId, converter: &TextConverter, event: AsrEvent) -> Envelope {
+    let event = converter.convert_event(event);
     match event {
         AsrEvent::Final {
             revision,
@@ -36,13 +38,14 @@ pub fn spawn_pump(
     slot: EngineSlot,
     sender: broadcast::Sender<Envelope>,
     session: SessionId,
+    converter: TextConverter,
 ) -> PumpHandle {
     let stop = Arc::new(AtomicBool::new(false));
     let stop_flag = Arc::clone(&stop);
     let join = std::thread::Builder::new()
         .name("voxflow-dictation-pump".to_string())
         .spawn(move || {
-            if let Err(error) = pump_loop(slot, sender, session, stop_flag) {
+            if let Err(error) = pump_loop(slot, sender, session, converter, stop_flag) {
                 tracing::warn!(%error, "dictation pump ended with error");
             }
         })
@@ -54,6 +57,7 @@ fn pump_loop(
     slot: EngineSlot,
     sender: broadcast::Sender<Envelope>,
     session: SessionId,
+    converter: TextConverter,
     stop: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
     let mut source = PipeWireAudioSource::new();
@@ -77,7 +81,7 @@ fn pump_loop(
             recognizer.poll_events(&session)?
         };
         for event in events {
-            let _ = sender.send(project(&session, event));
+            let _ = sender.send(project(&session, &converter, event));
         }
     }
 
@@ -89,7 +93,7 @@ fn pump_loop(
         }
     };
     for event in final_events {
-        let _ = sender.send(project(&session, event));
+        let _ = sender.send(project(&session, &converter, event));
     }
     source.stop()?;
     Ok(())

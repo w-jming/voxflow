@@ -13,6 +13,7 @@ pub mod recognizer;
 #[cfg(feature = "live-asr")]
 pub mod runtime;
 pub mod server;
+pub mod text;
 
 pub use crate::config::Config;
 pub use crate::core::VoxflowCore;

@@ -72,7 +72,10 @@ def main():
                 # Warm up compile/cudagraph capture now so the first real
                 # utterance does not stall ~15s (frames would be dropped).
                 warm = asr.init_streaming_state(
-                    unfixed_chunk_num=2, unfixed_token_num=5, chunk_size_sec=2.0
+                    language=(msg.get("language") or None),
+                    unfixed_chunk_num=2,
+                    unfixed_token_num=5,
+                    chunk_size_sec=2.0,
                 )
                 asr.streaming_transcribe(
                     np.zeros(16000 * 4, dtype=np.float32), warm
@@ -85,7 +88,9 @@ def main():
             if asr is None:
                 reply({"event": "error", "message": "not initialized"})
                 continue
+            language = init_cfg.get("language") or None
             state = asr.init_streaming_state(
+                language=language,
                 unfixed_chunk_num=int(init_cfg.get("unfixed_chunk_num", 2)),
                 unfixed_token_num=int(init_cfg.get("unfixed_token_num", 5)),
                 chunk_size_sec=float(init_cfg.get("chunk_size_sec", 2.0)),

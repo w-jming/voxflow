@@ -7,7 +7,12 @@ type Backend = "qwen3_vllm" | "volcano_api" | "zipformer_local" | "mock";
 
 interface AsrConfigShape {
   backend: Backend;
-  qwen3: { model: string; python: string; sidecar_script: string };
+  qwen3: {
+    model: string;
+    python: string;
+    sidecar_script: string;
+    language: string;
+  };
   volcano: {
     app_key: string;
     access_key: string;
@@ -16,6 +21,20 @@ interface AsrConfigShape {
     endpoint: string;
   };
 }
+
+type OutputScript = "simplified" | "traditional" | "original";
+
+const SCRIPTS: { key: OutputScript; label: string; description: string }[] = [
+  { key: "simplified", label: "简体中文", description: "默认;繁体输出经 OpenCC 词组级转换为简体。" },
+  { key: "traditional", label: "繁體中文", description: "简体输出转换为繁体(OpenCC)。" },
+  { key: "original", label: "原样输出", description: "不转换,保留模型原始简/繁结果。" },
+];
+
+const QWEN_LANGS: { key: string; label: string; description: string }[] = [
+  { key: "zh", label: "中文(默认)", description: "中文为主,内嵌英文按原文保留;避免整段被翻译成英文。" },
+  { key: "en", label: "英文", description: "以英文转写。" },
+  { key: "", label: "自动检测", description: "由模型判断语言(可能把中文翻译成英文,不推荐)。" },
+];
 
 const BACKENDS: { key: Backend; label: string; description: string }[] = [
   {
@@ -42,6 +61,7 @@ export default function Input() {
   const [asr, setAsr] = useState<AsrConfigShape | null>(null);
   const [hotkey, setHotkey] = useState("Alt+S");
   const [mode, setMode] = useState<"toggle" | "hold">("toggle");
+  const [script, setScript] = useState<OutputScript>("simplified");
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
 
@@ -54,6 +74,8 @@ export default function Input() {
         const input = config.input as Record<string, unknown> | undefined;
         setHotkey((input?.hotkey as string) ?? "Alt+S");
         setMode(((input?.mode as string) ?? "toggle") as "toggle" | "hold");
+        const text = config.text as Record<string, unknown> | undefined;
+        setScript(((text?.output_script as string) ?? "simplified") as OutputScript);
       }
     })();
   }, []);
@@ -235,13 +257,62 @@ export default function Input() {
 
           {asr.backend === "qwen3_vllm" ? (
             <section className="panel">
-              <div className="panel-label">Qwen3 引擎</div>
-              <div className="muted">
+              <div className="panel-label">Qwen3 引擎与识别语言</div>
+              <div className="muted" style={{ marginBottom: 10 }}>
                 模型 <span className="mono">{asr.qwen3.model}</span> ·
                 守护进程启动时预载并预热,权重缓存于本机,无需联网。
+                <br />
+                修改识别语言需切换后端或重启 Core 后生效。
               </div>
+              {QWEN_LANGS.map(({ key, label, description }) => (
+                <label
+                  key={key || "auto"}
+                  className={`choice ${asr.qwen3.language === key ? "selected" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="qwen-language"
+                    checked={asr.qwen3.language === key}
+                    onChange={() => {
+                      setAsr({
+                        ...asr,
+                        qwen3: { ...asr.qwen3, language: key },
+                      });
+                      void save({ asr: { qwen3: { language: key } } });
+                    }}
+                  />
+                  <div className="grow">
+                    <div>{label}</div>
+                    <div className="muted">{description}</div>
+                  </div>
+                </label>
+              ))}
             </section>
           ) : null}
+
+          <section className="panel">
+            <div className="panel-label">文本输出(简繁)</div>
+            {SCRIPTS.map(({ key, label, description }) => (
+              <label
+                key={key}
+                className={`choice ${script === key ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="output-script"
+                  checked={script === key}
+                  onChange={() => {
+                    setScript(key);
+                    void save({ text: { output_script: key } });
+                  }}
+                />
+                <div className="grow">
+                  <div>{label}</div>
+                  <div className="muted">{description}</div>
+                </div>
+              </label>
+            ))}
+          </section>
         </>
       )}
       {savedTick > 0 ? <p className="muted">✓ 已保存</p> : null}

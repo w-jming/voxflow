@@ -54,49 +54,49 @@ impl CoreIpcClient {
         })
     }
 
+    /// Sends a command and returns the matching response, correlated by `id`.
+    /// Interleaved broadcast/inline events are skipped (the event pump owns
+    /// event handling) so a streaming dictation cannot desync this socket.
     pub fn send_command(&mut self, command: Envelope) -> Result<Vec<Envelope>> {
+        let want_id = command.id.clone();
         let mut line = serde_json::to_vec(&command)?;
         line.push(b'\n');
         self.writer.write_all(&line)?;
         self.writer.flush()?;
 
-        let mut envelopes = Vec::new();
         loop {
             let mut line = String::new();
             match self.reader.read_line(&mut line) {
-                Ok(0) => break,
+                Ok(0) => bail!("Core closed before responding to {}", command.name),
                 Ok(_) => {
                     if line.trim().is_empty() {
                         continue;
                     }
                     let envelope = serde_json::from_str::<Envelope>(&line)
-                        .with_context(|| format!("parse Core JSONL response: {line}"))?;
-                    envelopes.push(envelope);
+                        .with_context(|| format!("parse Core JSONL reply: {line}"))?;
+                    if envelope.id != want_id {
+                        continue; // a broadcast/inline event, not our response
+                    }
+                    return match envelope.kind {
+                        MessageKind::Response => Ok(vec![envelope]),
+                        MessageKind::Error => bail!(
+                            "Core returned error for {}: {}",
+                            command.name,
+                            envelope
+                                .code
+                                .as_deref()
+                                .unwrap_or("core.error_without_code")
+                        ),
+                        _ => continue,
+                    };
                 }
                 Err(error)
                     if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
                 {
-                    break;
+                    bail!("Core timed out responding to {}", command.name);
                 }
-                Err(error) => return Err(error).context("read Core JSONL response"),
+                Err(error) => return Err(error).context("read Core JSONL reply"),
             }
-        }
-
-        if envelopes.is_empty() {
-            bail!("Core returned no response for {}", command.name);
-        }
-        let response = &envelopes[0];
-        match response.kind {
-            MessageKind::Response => Ok(envelopes),
-            MessageKind::Error => bail!(
-                "Core returned error for {}: {}",
-                response.name,
-                response
-                    .code
-                    .as_deref()
-                    .unwrap_or("core.error_without_code")
-            ),
-            _ => bail!("first Core reply for {} was not a response", command.name),
         }
     }
 }
@@ -220,11 +220,10 @@ impl CoreEngineSession {
             env!("CARGO_PKG_VERSION"),
             &FrontendCapabilities::full(),
         ))?;
-        client.send_command(Envelope::command(
-            "ibus-subscribe-1",
-            "core.subscribe",
-            json!({ "groups": ["dictation", "state", "correction"] }),
-        ))?;
+        // The bridge only issues commands (register/report/start/stop). Event
+        // delivery is the CoreEventPump's job on its own connection — keeping
+        // this socket unsubscribed avoids interleaving broadcasts with
+        // command responses and prevents double projection.
         Ok(Self {
             client,
             projector: DictationProjector::default(),

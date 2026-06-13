@@ -28,6 +28,7 @@ pub fn build_recognizer(
             options.unfixed_token_num = qwen3.unfixed_token_num;
             options.max_new_tokens = qwen3.max_new_tokens;
             options.max_model_len = qwen3.max_model_len;
+            options.language = qwen3.language.clone();
             Ok(Box::new(voxflow_asr_qwen3::Qwen3SidecarRecognizer::new(
                 options,
             )))

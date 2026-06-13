@@ -78,11 +78,43 @@ fn main() -> Result<()> {
                 println!("registered org.freedesktop.IBus.Factory as {unique_name}");
                 Ok(())
             } else {
+                init_engine_logging();
                 let socket = socket.unwrap_or(default_core_socket()?);
+                tracing::info!(?socket, "voxflow ibus engine starting");
                 run_engine_forever(socket)
             }
         }
         Some(other) => bail!("unknown command: {other}"),
+    }
+}
+
+/// ibus-daemon spawns the engine with no usable stderr, so log to a file the
+/// owner can tail while diagnosing the input chain.
+fn init_engine_logging() {
+    use std::io::Write as _;
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
+    let dir = std::path::Path::new(&home).join(".voxflow/logs");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("ibus-engine.log");
+    if let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(
+            std::io::stderr(),
+            "voxflow ibus engine logging to {}",
+            path.display()
+        );
+        let _ = tracing_subscriber::fmt()
+            .with_writer(std::sync::Mutex::new(file))
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "voxflow_ibus=debug,info".into()),
+            )
+            .try_init();
     }
 }
 
