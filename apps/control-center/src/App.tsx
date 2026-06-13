@@ -78,12 +78,20 @@ export default function App() {
         if (state === "connected") {
           void refreshModels();
           void refreshStatus();
+          void useControlStore.getState().refreshConfig();
         }
       }),
       onSnapshot((payload) => setSnapshot(payload)),
       onCoreEvent((name, payload) => applyCoreEvent(name, payload)),
     ];
     void Promise.all(subscriptions).then(() => resync());
+    // 定时刷新状态:输入法前端在用户切换输入源后才注册,轮询确保 UI 及时反映
+    // active/ready,而不是停留在连接时的 not_installed。
+    const poll = setInterval(() => {
+      if (useControlStore.getState().connection === "connected") {
+        void useControlStore.getState().refreshStatus();
+      }
+    }, 2000);
     // 启动即应用主题(默认跟随系统;config.ui.theme 覆盖)
     applyTheme("system");
     void coreCommand("config.get").then((reply) => {
@@ -95,6 +103,7 @@ export default function App() {
       }
     });
     return () => {
+      clearInterval(poll);
       for (const subscription of subscriptions) {
         void subscription.then((unlisten) => unlisten());
       }

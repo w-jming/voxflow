@@ -99,6 +99,23 @@ fn pump_loop(
     Ok(())
 }
 
+fn load_baseline_path(paths: &crate::paths::VoxflowPaths) -> std::path::PathBuf {
+    paths.cache.join("engine_load_secs")
+}
+
+fn read_load_baseline(paths: &crate::paths::VoxflowPaths) -> Option<f64> {
+    std::fs::read_to_string(load_baseline_path(paths))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+fn write_load_baseline(paths: &crate::paths::VoxflowPaths, secs: f64) {
+    let _ = std::fs::create_dir_all(&paths.cache);
+    let _ = std::fs::write(load_baseline_path(paths), format!("{secs:.1}"));
+}
+
 /// Preloads and warms the configured engine at daemon startup so the first
 /// hotkey press is instant (owner acceptance bar: hot path < 200 ms).
 pub fn spawn_preload(core: Arc<tokio::sync::Mutex<VoxflowCore>>) {
@@ -126,6 +143,35 @@ pub fn spawn_preload(core: Arc<tokio::sync::Mutex<VoxflowCore>>) {
                 backend = crate::backend::backend_label(backend),
                 "preloading ASR engine"
             );
+
+            // Loading has no fine-grained callback, so estimate against the
+            // last successful load time (persisted) and emit a per-second
+            // heartbeat with elapsed / estimate so the UI can show progress.
+            let baseline = read_load_baseline(&paths).unwrap_or(150.0);
+            let started = std::time::Instant::now();
+            let done = Arc::new(AtomicBool::new(false));
+            if let Some(sender) = &sender {
+                let sender = sender.clone();
+                let done = Arc::clone(&done);
+                std::thread::spawn(move || {
+                    while !done.load(Ordering::Relaxed) {
+                        let elapsed = started.elapsed().as_secs_f64();
+                        let percent = ((elapsed / baseline) * 100.0).min(96.0);
+                        let remaining = (baseline - elapsed).max(0.0);
+                        let _ = sender.send(Envelope::event(
+                            "asr.engine_loading",
+                            serde_json::json!({
+                                "elapsed_s": elapsed.round() as u64,
+                                "estimate_s": baseline.round() as u64,
+                                "remaining_s": remaining.round() as u64,
+                                "percent": percent.round() as u64,
+                            }),
+                        ));
+                        std::thread::sleep(Duration::from_secs(1));
+                    }
+                });
+            }
+
             let result =
                 crate::backend::build_recognizer(&config, &paths).and_then(|mut recognizer| {
                     // First session forces the heavy load (qwen3 sidecar init
@@ -134,12 +180,19 @@ pub fn spawn_preload(core: Arc<tokio::sync::Mutex<VoxflowCore>>) {
                     let _ = recognizer.finish_session(&warm)?;
                     Ok(recognizer)
                 });
+            done.store(true, Ordering::Relaxed);
             match result {
                 Ok(recognizer) => {
+                    let took = started.elapsed().as_secs_f64();
+                    write_load_baseline(&paths, took);
                     *slot.lock().expect("engine slot") = Some(recognizer);
                     core.blocking_lock().mark_engine_ready(backend);
-                    tracing::info!("ASR engine resident and warm");
+                    tracing::info!(took_s = took, "ASR engine resident and warm");
                     if let Some(sender) = sender {
+                        let _ = sender.send(Envelope::event(
+                            "asr.engine_loading",
+                            serde_json::json!({ "percent": 100, "remaining_s": 0 }),
+                        ));
                         let _ = sender.send(Envelope::event(
                             "core.notice",
                             serde_json::json!({
@@ -154,6 +207,16 @@ pub fn spawn_preload(core: Arc<tokio::sync::Mutex<VoxflowCore>>) {
                     tracing::warn!(%error, "engine preload failed");
                     core.blocking_lock()
                         .set_engine_state(format!("error: {error}"));
+                    if let Some(sender) = sender {
+                        let _ = sender.send(Envelope::event(
+                            "core.notice",
+                            serde_json::json!({
+                                "level": "error",
+                                "code": "asr.engine_error",
+                                "message": format!("识别引擎加载失败:{error}"),
+                            }),
+                        ));
+                    }
                 }
             }
         })
