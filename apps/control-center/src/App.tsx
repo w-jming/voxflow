@@ -113,8 +113,10 @@ export default function App() {
             data-logo-light
             style={{ display: "none" }}
           />
-          <span className="brand-name">VoxFlow</span>
-          <span className="brand-sub">声流输入法</span>
+          <span className="brand-text">
+            <span className="brand-name">VoxFlow</span>
+            <span className="brand-sub">声流输入法</span>
+          </span>
         </div>
         {PAGES.map(({ key, label }, index) => (
           <button

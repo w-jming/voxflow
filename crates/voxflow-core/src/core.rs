@@ -62,6 +62,7 @@ pub struct VoxflowCore {
     correction_operation_counter: u64,
     downloads: DownloadManager,
     event_sender: Option<tokio::sync::broadcast::Sender<Envelope>>,
+    self_handle: Option<std::sync::Weak<tokio::sync::Mutex<VoxflowCore>>>,
 }
 
 impl VoxflowCore {
@@ -92,7 +93,13 @@ impl VoxflowCore {
             correction_operation_counter: 0,
             downloads: DownloadManager::default(),
             event_sender: None,
+            self_handle: None,
         })
+    }
+
+    /// 让 core 能为自身派生后台任务(后端切换时重载引擎)。
+    pub fn set_self_handle(&mut self, handle: std::sync::Weak<tokio::sync::Mutex<VoxflowCore>>) {
+        self.self_handle = handle.into();
     }
 
     /// Wires the broadcast channel used by background tasks (downloads) to
@@ -126,6 +133,7 @@ impl VoxflowCore {
             correction_operation_counter: 0,
             downloads: DownloadManager::default(),
             event_sender: None,
+            self_handle: None,
         }
     }
 
@@ -169,7 +177,7 @@ impl VoxflowCore {
             return Ok(());
         }
         if self.engine_state == "loading" {
-            anyhow::bail!("ASR 引擎正在加载,请稍候");
+            anyhow::bail!("识别引擎加载中(切换后约需 1-2 分钟),请稍候再按快捷键");
         }
         let recognizer = crate::backend::build_recognizer(&self.config, &self.paths)?;
         *self.engine.lock().expect("engine slot") = Some(recognizer);
@@ -335,6 +343,8 @@ impl VoxflowCore {
         let previous = self.config.clone();
         match self.config.apply_json_patch(patch) {
             Ok(()) => {
+                let backend_changed = previous.asr.backend != self.config.asr.backend
+                    && self.config.asr.backend != crate::config::AsrBackend::Mock;
                 if let Err(error) = self.config.save(&self.paths.config) {
                     self.config = previous;
                     return self.error(
@@ -352,6 +362,24 @@ impl VoxflowCore {
                     "config.changed",
                     json!({ "config_revision": self.config_revision }),
                 ));
+                if backend_changed {
+                    // 切换后端:旧引擎立即失效,后台重载,期间听写明确不可用。
+                    self.recognizer_backend = None;
+                    self.engine_state = "loading".to_string();
+                    outcome.events.push(Envelope::event(
+                        "core.notice",
+                        json!({
+                            "level": "info",
+                            "code": "asr.engine_loading",
+                            "message": "识别引擎切换中,听写暂不可用",
+                        }),
+                    ));
+                    #[cfg(feature = "live-asr")]
+                    if let Some(core) = self.self_handle.as_ref().and_then(std::sync::Weak::upgrade)
+                    {
+                        crate::runtime::spawn_preload(core);
+                    }
+                }
                 outcome
             }
             Err(error) => {
