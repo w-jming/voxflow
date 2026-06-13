@@ -47,6 +47,7 @@ pub struct ZbusIbusEngine {
     listening: bool,
     hotkey: Option<(u32, u32)>,
     hold_mode: bool,
+    settings_fetched_at: Option<std::time::Instant>,
     #[allow(clippy::type_complexity)]
     core_bridge: Option<Box<dyn IbusCoreBridge>>,
 }
@@ -121,6 +122,24 @@ impl ZbusIbusEngine {
         Ok(())
     }
 
+    /// 从 core 拉取快捷键/模式;非强制时 1s 内的缓存直接复用,
+    /// 保证 UI 改动在下一次按键即生效。
+    fn refresh_settings(&mut self, force: bool) {
+        let fresh = self
+            .settings_fetched_at
+            .map(|at| at.elapsed() < std::time::Duration::from_secs(1))
+            .unwrap_or(false);
+        if !force && fresh {
+            return;
+        }
+        if let Some(bridge) = &mut self.core_bridge {
+            let (hotkey, mode) = bridge.input_settings();
+            self.hotkey = parse_hotkey(&hotkey);
+            self.hold_mode = mode == "hold";
+            self.settings_fetched_at = Some(std::time::Instant::now());
+        }
+    }
+
     fn stop_dictation_no_signal(&mut self) -> zbus::fdo::Result<()> {
         if let Some(core_bridge) = &mut self.core_bridge {
             self.pending_operations
@@ -192,12 +211,7 @@ impl ZbusIbusEngine {
         &mut self,
         #[zbus(signal_context)] _ctxt: SignalContext<'_>,
     ) -> zbus::fdo::Result<()> {
-        // 每次进入焦点刷新快捷键/模式配置(支持 UI 实时自定义)。
-        if let Some(bridge) = &mut self.core_bridge {
-            let (hotkey, mode) = bridge.input_settings();
-            self.hotkey = parse_hotkey(&hotkey);
-            self.hold_mode = mode == "hold";
-        }
+        self.refresh_settings(true);
         // Dictation is hotkey-driven (D-14); focus only reports state.
         self.report(FrontendEvent::Focused { app_hint: None })
     }

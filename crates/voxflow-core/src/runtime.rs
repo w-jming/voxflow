@@ -104,6 +104,8 @@ pub fn spawn_preload(core: Arc<tokio::sync::Mutex<VoxflowCore>>) {
             let (config, paths, slot, sender) = {
                 let mut guard = core.blocking_lock();
                 guard.set_engine_state("loading");
+                // 后端切换会清空 recognizer_backend;旧引擎一并丢弃释放资源。
+                *guard.engine_slot().lock().expect("engine slot") = None;
                 (
                     guard.config_clone(),
                     guard.paths_clone(),

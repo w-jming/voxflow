@@ -27,7 +27,11 @@ pub async fn serve(core: Arc<Mutex<VoxflowCore>>, socket: &Path) -> Result<()> {
     tracing::info!(socket = %socket.display(), "voxflow-core listening");
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let (event_tx, _) = broadcast::channel(256);
-    core.lock().await.set_event_sender(event_tx.clone());
+    {
+        let mut guard = core.lock().await;
+        guard.set_event_sender(event_tx.clone());
+        guard.set_self_handle(Arc::downgrade(&core));
+    }
     #[cfg(feature = "live-asr")]
     crate::runtime::spawn_preload(core.clone());
 
