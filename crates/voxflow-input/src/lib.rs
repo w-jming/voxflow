@@ -173,10 +173,23 @@ impl DictationProjector {
         if is_status_placeholder(text) {
             return Err(ProjectionError::StatusPlaceholder(text.to_string()));
         }
-        self.preedit_text = text.to_string();
+        // Show only the not-yet-committed tail in preedit; the recognizer's
+        // running text still contains the spans we already committed via
+        // stable events, and re-showing them would double up on screen.
+        let tail = uncommitted_tail(&self.committed_text, text);
+        if tail.is_empty() {
+            let mut events = Vec::new();
+            if !self.preedit_text.is_empty() {
+                self.preedit_text.clear();
+                events.push(InputEvent::ClearPreedit);
+            }
+            return Ok(events);
+        }
+        self.preedit_text = tail.clone();
+        let cursor_pos = tail.chars().count();
         Ok(vec![InputEvent::SetPreedit {
-            text: text.to_string(),
-            cursor_pos: text.chars().count(),
+            text: tail,
+            cursor_pos,
             underline: true,
         }])
     }
@@ -186,8 +199,7 @@ impl DictationProjector {
         envelope: &Envelope,
     ) -> Result<Vec<InputEvent>, ProjectionError> {
         let text = dictation_text(envelope)?;
-        let suffix =
-            uncommitted_suffix(&self.committed_text, text).unwrap_or_else(|| text.to_string());
+        let suffix = uncommitted_tail(&self.committed_text, text);
         let mut events = Vec::new();
         if !self.preedit_text.is_empty() {
             self.preedit_text.clear();
@@ -260,8 +272,30 @@ fn dictation_text(envelope: &Envelope) -> Result<&str, ProjectionError> {
         .ok_or_else(|| ProjectionError::MissingText(envelope.name.clone()))
 }
 
-fn uncommitted_suffix(committed: &str, text: &str) -> Option<String> {
-    text.strip_prefix(committed).map(ToString::to_string)
+/// Returns the part of `text` that extends beyond what is already committed.
+///
+/// Streaming recognizers report a *running* transcript, not a strict append:
+/// Qwen's vLLM streaming keeps an unfixed tail and a sliding window, so the
+/// running text revises its end and eventually drops its head. A plain
+/// `strip_prefix` therefore fails once the window slides and would re-commit
+/// the whole overlapping span (the "same sentence repeats" bug). Instead we
+/// merge on the longest overlap between the tail of `committed` and the head
+/// of `text`, then return only what comes after it. Works on `char`s so it is
+/// safe for multi-byte text.
+fn uncommitted_tail(committed: &str, text: &str) -> String {
+    if committed.is_empty() {
+        return text.to_string();
+    }
+    let committed_chars: Vec<char> = committed.chars().collect();
+    let text_chars: Vec<char> = text.chars().collect();
+    let max_overlap = committed_chars.len().min(text_chars.len());
+    for k in (1..=max_overlap).rev() {
+        if committed_chars[committed_chars.len() - k..] == text_chars[..k] {
+            return text_chars[k..].iter().collect();
+        }
+    }
+    // No overlap with the committed tail: treat as a fresh span.
+    text.to_string()
 }
 
 #[cfg(test)]
@@ -353,6 +387,65 @@ mod tests {
             final_events,
             vec![InputEvent::Commit {
                 text: "三点开会".to_string()
+            }]
+        );
+    }
+
+    #[test]
+    fn sliding_window_transcript_does_not_recommit_overlap() {
+        // Reproduces the Qwen streaming repetition: the running text slides
+        // its window forward, so later stables no longer start with the full
+        // committed prefix. Only the genuinely-new tail must be committed.
+        let mut projector = DictationProjector::default();
+        let first = projector
+            .project(&Envelope::event(
+                "dictation.stable",
+                json!({ "session_id": "s", "text": "你好你好这是测试" }),
+            ))
+            .unwrap();
+        assert_eq!(
+            first,
+            vec![InputEvent::Commit {
+                text: "你好你好这是测试".to_string()
+            }]
+        );
+        // Window slid: "你好你好" dropped from the head, "一二三" added.
+        let second = projector
+            .project(&Envelope::event(
+                "dictation.stable",
+                json!({ "session_id": "s", "text": "这是测试一二三" }),
+            ))
+            .unwrap();
+        assert_eq!(
+            second,
+            vec![InputEvent::Commit {
+                text: "一二三".to_string()
+            }]
+        );
+    }
+
+    #[test]
+    fn partial_after_commit_shows_only_uncommitted_tail() {
+        let mut projector = DictationProjector::default();
+        projector
+            .project(&Envelope::event(
+                "dictation.stable",
+                json!({ "session_id": "s", "text": "你好" }),
+            ))
+            .unwrap();
+        // Recognizer's running text still includes the committed "你好".
+        let events = projector
+            .project(&Envelope::event(
+                "dictation.partial",
+                json!({ "session_id": "s", "text": "你好世界" }),
+            ))
+            .unwrap();
+        assert_eq!(
+            events,
+            vec![InputEvent::SetPreedit {
+                text: "世界".to_string(),
+                cursor_pos: 2,
+                underline: true,
             }]
         );
     }

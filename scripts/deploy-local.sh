@@ -79,6 +79,20 @@ cat > "$DEPLOY_DIR/run-control-center.sh" <<EOF
 exec "$DEPLOY_DIR/bin/voxflow-control-center"
 EOF
 chmod +x "$DEPLOY_DIR"/run-*.sh
+install -m 755 "$REPO_DIR/scripts/voxflow-launch.sh" "$DEPLOY_DIR/voxflow-launch.sh"
+
+echo "==> installing desktop launcher (apps menu)"
+ICON_DIR="$HOME/.local/share/icons/hicolor/128x128/apps"
+APPS_DIR="$HOME/.local/share/applications"
+mkdir -p "$ICON_DIR" "$APPS_DIR"
+install -m 644 "$REPO_DIR/apps/control-center/src-tauri/icons/icon.png" "$ICON_DIR/voxflow.png"
+sed -e "s|@LAUNCH@|$DEPLOY_DIR/voxflow-launch.sh|" \
+    -e "s|@ICON@|voxflow|" \
+    "$REPO_DIR/packaging/linux/voxflow.desktop.in" > "$APPS_DIR/voxflow.desktop"
+chmod +x "$APPS_DIR/voxflow.desktop"
+update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
+gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+echo "desktop entry: $APPS_DIR/voxflow.desktop"
 
 cat > "$DEPLOY_DIR/README.md" <<'EOF'
 # VoxFlow 本地部署(真机测试)
