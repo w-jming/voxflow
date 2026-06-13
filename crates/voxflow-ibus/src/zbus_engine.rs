@@ -31,6 +31,32 @@ fn parse_hotkey(spec: &str) -> Option<(u32, u32)> {
     key.map(|keyval| (mask, keyval))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DictationAction {
+    Start,
+    Stop,
+}
+
+/// Pure hotkey state machine. Toggle: press flips listening. Hold: press
+/// starts, release stops. Returns the transition to apply (if any).
+fn decide_action(hold_mode: bool, listening: bool, is_press: bool) -> Option<DictationAction> {
+    if hold_mode {
+        match (is_press, listening) {
+            (true, false) => Some(DictationAction::Start),
+            (false, true) => Some(DictationAction::Stop),
+            _ => None,
+        }
+    } else if is_press {
+        Some(if listening {
+            DictationAction::Stop
+        } else {
+            DictationAction::Start
+        })
+    } else {
+        None
+    }
+}
+
 /// `Some(is_press)` when the event matches the configured hotkey (D-14).
 fn hotkey_match(hotkey: (u32, u32), keyval: u32, state: u32) -> Option<bool> {
     let (mask, key) = hotkey;
@@ -130,8 +156,9 @@ impl ZbusIbusEngine {
         Ok(())
     }
 
-    /// 从 core 拉取快捷键/模式;非强制时 1s 内的缓存直接复用,
-    /// 保证 UI 改动在下一次按键即生效。
+    /// 从 core 拉取快捷键/模式。**仅在未听写时调用**:一次听写过程中绝不重读
+    /// (否则 hold 松手事件触发的 config.get 偶发失败会把模式回退成 toggle,
+    /// 导致松手不停)。读取失败时保留上次值,不回退默认。
     fn refresh_settings(&mut self, force: bool) {
         let fresh = self
             .settings_fetched_at
@@ -141,7 +168,9 @@ impl ZbusIbusEngine {
             return;
         }
         if let Some(bridge) = &mut self.core_bridge {
-            let (hotkey, mode) = bridge.input_settings();
+            let Some((hotkey, mode)) = bridge.input_settings() else {
+                return; // keep last-known settings on a transient read failure
+            };
             self.hotkey = parse_hotkey(&hotkey);
             self.hold_mode = mode == "hold";
             self.settings_fetched_at = Some(std::time::Instant::now());
@@ -256,28 +285,31 @@ impl ZbusIbusEngine {
         _keycode: u32,
         state: u32,
     ) -> zbus::fdo::Result<bool> {
+        let is_release = state & IBUS_RELEASE_MASK != 0;
+        // Pick up hotkey/mode changes at the moment of a likely hotkey press
+        // while idle — config is then quiescent so the read is reliable. Never
+        // refresh during an active session (re-reading on the hold-release
+        // event previously flipped the mode and broke "release to stop").
+        let has_modifier =
+            state & (IBUS_MOD1_MASK | IBUS_CONTROL_MASK | IBUS_SUPER_MASK | IBUS_SHIFT_MASK) != 0;
+        if !is_release && !self.listening && has_modifier {
+            self.refresh_settings(true);
+        }
+
         let hotkey = self.hotkey.unwrap_or((IBUS_MOD1_MASK, 's' as u32));
         let Some(is_press) = hotkey_match(hotkey, keyval, state) else {
             return Ok(false);
         };
-        if self.hold_mode {
-            // 按住说话:按下开始,松开结束。
-            if is_press && !self.listening {
-                self.listening = true;
-                self.start_dictation(&ctxt)?;
-            } else if !is_press && self.listening {
-                self.listening = false;
-                self.stop_dictation(&ctxt)?;
-            }
-        } else if is_press {
-            // 切换模式:按一次开始,再按一次结束。
-            if self.listening {
-                self.listening = false;
-                self.stop_dictation(&ctxt)?;
-            } else {
+        match decide_action(self.hold_mode, self.listening, is_press) {
+            Some(DictationAction::Start) => {
                 self.listening = true;
                 self.start_dictation(&ctxt)?;
             }
+            Some(DictationAction::Stop) => {
+                self.listening = false;
+                self.stop_dictation(&ctxt)?;
+            }
+            None => {}
         }
         Ok(true)
     }
@@ -484,6 +516,38 @@ mod tests {
             Some(true)
         );
         assert_eq!(parse_hotkey("Alt+Enter怪"), None);
+    }
+
+    #[test]
+    fn hold_mode_starts_on_press_and_stops_on_release() {
+        // press while idle -> start; release while listening -> stop.
+        assert_eq!(
+            decide_action(true, false, true),
+            Some(DictationAction::Start)
+        );
+        assert_eq!(
+            decide_action(true, true, false),
+            Some(DictationAction::Stop)
+        );
+        // auto-repeat press while already listening -> no-op (no restart).
+        assert_eq!(decide_action(true, true, true), None);
+        // stray release while idle -> no-op.
+        assert_eq!(decide_action(true, false, false), None);
+    }
+
+    #[test]
+    fn toggle_mode_flips_on_press_only() {
+        assert_eq!(
+            decide_action(false, false, true),
+            Some(DictationAction::Start)
+        );
+        assert_eq!(
+            decide_action(false, true, true),
+            Some(DictationAction::Stop)
+        );
+        // releases are ignored in toggle mode.
+        assert_eq!(decide_action(false, true, false), None);
+        assert_eq!(decide_action(false, false, false), None);
     }
 
     #[test]

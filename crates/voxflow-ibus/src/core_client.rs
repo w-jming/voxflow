@@ -25,9 +25,10 @@ pub trait IbusCoreBridge: Send + Sync {
     fn report_frontend_event(&mut self, event: FrontendEvent) -> Result<()>;
     fn start_dictation(&mut self) -> Result<Vec<IbusOperation>>;
     fn stop_dictation(&mut self) -> Result<Vec<IbusOperation>>;
-    /// (hotkey 如 "Alt+S", mode "toggle"|"hold");读取失败用默认。
-    fn input_settings(&mut self) -> (String, String) {
-        ("Alt+S".to_string(), "toggle".to_string())
+    /// (hotkey 如 "Alt+S", mode "toggle"|"hold");读取失败返回 None,
+    /// 由调用方保留上次已知值,而非回退默认。
+    fn input_settings(&mut self) -> Option<(String, String)> {
+        None
     }
 }
 
@@ -266,19 +267,17 @@ impl CoreEngineSession {
 }
 
 impl IbusCoreBridge for CoreEngineSession {
-    fn input_settings(&mut self) -> (String, String) {
+    fn input_settings(&mut self) -> Option<(String, String)> {
         let id = self.next_id("ibus-config");
-        let Ok(envelopes) =
-            self.client
-                .send_command(Envelope::command(id, "config.get", json!({})))
-        else {
-            return ("Alt+S".to_string(), "toggle".to_string());
-        };
+        let envelopes = self
+            .client
+            .send_command(Envelope::command(id, "config.get", json!({})))
+            .ok()?;
         let input = &envelopes[0].payload["config"]["input"];
-        (
+        Some((
             input["hotkey"].as_str().unwrap_or("Alt+S").to_string(),
             input["mode"].as_str().unwrap_or("toggle").to_string(),
-        )
+        ))
     }
 
     fn report_frontend_event(&mut self, event: FrontendEvent) -> Result<()> {
