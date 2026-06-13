@@ -31,6 +31,10 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Some("serve") => {
+            let swept = voxflow_asr_qwen3::sweep_orphaned_engines();
+            if swept > 0 {
+                tracing::warn!(swept, "swept orphaned vLLM engine processes at startup");
+            }
             let paths = VoxflowPaths::from_env()?;
             let _guard = InstanceGuard::acquire(&paths)?;
             let socket = paths.socket.clone();

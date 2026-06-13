@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageHead } from "../App";
 import { coreCommand } from "../bridge";
 import { useControlStore } from "../store";
 
@@ -19,18 +20,20 @@ interface AsrConfigShape {
 const BACKENDS: { key: Backend; label: string; description: string }[] = [
   {
     key: "qwen3_vllm",
-    label: "Qwen3-ASR-1.7B + vLLM(默认,本地 GPU)",
-    description: "开源 SOTA 准确率;本地推理,无数据外发;需要已部署的 vLLM sidecar。",
+    label: "Qwen3-ASR-1.7B + vLLM(默认 · 本地 GPU)",
+    description:
+      "开源 SOTA 准确率,数据不出本机;守护进程启动时预载,按键即听。",
   },
   {
     key: "volcano_api",
     label: "火山引擎大模型语音识别(云端 API)",
-    description: "需在下方配置 APP ID 与 Access Token;音频将发送至火山引擎服务。",
+    description:
+      "需配置 APP ID 与 Access Token;音频发送至火山引擎。⚠ 未经真实服务验证。",
   },
   {
     key: "zipformer_local",
     label: "Zipformer 流式(本地 CPU 兜底)",
-    description: "轻量本地模型(模型页下载安装);延迟最低,准确率次之。",
+    description: "轻量本地模型,延迟最低;在「模型」页下载并激活。",
   },
 ];
 
@@ -64,133 +67,140 @@ export default function Input() {
     }
   };
 
-  if (!asr) {
-    return (
-      <div>
-        <h2>输入</h2>
-        <div className="card muted">等待 Core 连接后读取配置。</div>
-      </div>
-    );
-  }
-
   return (
     <div>
-      <h2>输入</h2>
+      <PageHead
+        index="02"
+        title="输入"
+        desc="听写快捷键与语音识别后端;切换在下一次听写时生效。"
+      />
       {lastError ? <div className="error-banner">{lastError}</div> : null}
 
-      <div className="card">
-        <strong>听写快捷键</strong>
-        <div className="muted">当前:{hotkey}(toggle/hold 共用,D-14)</div>
-      </div>
-
-      <div className="card">
-        <strong>语音识别后端</strong>
-        <div className="muted" style={{ marginBottom: 10 }}>
-          可自由切换;下次开始听写时生效。
+      <section className="panel">
+        <div className="panel-label">快捷键</div>
+        <div className="row">
+          <span className="telemetry">
+            <span className="k">听写开关</span>
+            <span className="v glow">{hotkey}</span>
+          </span>
+          <span className="muted">toggle / hold 共用(D-14)</span>
         </div>
-        {BACKENDS.map(({ key, label, description }) => (
-          <label
-            key={key}
-            className="row"
-            style={{ padding: "8px 0", cursor: "pointer", alignItems: "flex-start" }}
-          >
-            <input
-              type="radio"
-              name="asr-backend"
-              checked={asr.backend === key}
-              onChange={() => {
-                setAsr({ ...asr, backend: key });
-                void save({ asr: { backend: key } });
-              }}
-            />
-            <div className="grow">
-              <div>{label}</div>
-              <div className="muted">{description}</div>
-            </div>
-          </label>
-        ))}
-      </div>
+      </section>
 
-      {asr.backend === "volcano_api" ? (
-        <div className="card">
-          <strong>火山引擎密钥</strong>
-          <div className="muted" style={{ margin: "4px 0 10px" }}>
-            在火山引擎控制台(语音技术 → 大模型语音识别)获取;仅保存在本机
-            ~/.voxflow/config.toml,不会上传。
-          </div>
-          <div className="row" style={{ marginBottom: 8 }}>
-            <input
-              className="vf grow"
-              placeholder="APP ID(X-Api-App-Key)"
-              value={asr.volcano.app_key}
-              onChange={(event) =>
-                setAsr({
-                  ...asr,
-                  volcano: { ...asr.volcano, app_key: event.target.value },
-                })
-              }
-            />
-            <input
-              className="vf grow"
-              type="password"
-              placeholder="Access Token(X-Api-Access-Key)"
-              value={asr.volcano.access_key}
-              onChange={(event) =>
-                setAsr({
-                  ...asr,
-                  volcano: { ...asr.volcano, access_key: event.target.value },
-                })
-              }
-            />
-          </div>
-          <div className="row" style={{ marginBottom: 8 }}>
-            <input
-              className="vf grow"
-              placeholder="Resource ID"
-              value={asr.volcano.resource_id}
-              onChange={(event) =>
-                setAsr({
-                  ...asr,
-                  volcano: { ...asr.volcano, resource_id: event.target.value },
-                })
-              }
-            />
-            <input
-              className="vf grow"
-              placeholder="模型名(bigmodel)"
-              value={asr.volcano.model_name}
-              onChange={(event) =>
-                setAsr({
-                  ...asr,
-                  volcano: { ...asr.volcano, model_name: event.target.value },
-                })
-              }
-            />
-          </div>
-          <button
-            className="vf"
-            disabled={saving}
-            onClick={() => void save({ asr: { volcano: asr.volcano } })}
-          >
-            保存密钥
-          </button>
-        </div>
-      ) : null}
+      {!asr ? (
+        <section className="panel muted">等待 Core 连接后读取配置…</section>
+      ) : (
+        <>
+          <section className="panel">
+            <div className="panel-label">识别后端</div>
+            {BACKENDS.map(({ key, label, description }) => (
+              <label
+                key={key}
+                className={`choice ${asr.backend === key ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="asr-backend"
+                  checked={asr.backend === key}
+                  onChange={() => {
+                    setAsr({ ...asr, backend: key });
+                    void save({ asr: { backend: key } });
+                  }}
+                />
+                <div className="grow">
+                  <div>{label}</div>
+                  <div className="muted">{description}</div>
+                </div>
+              </label>
+            ))}
+          </section>
 
-      {asr.backend === "qwen3_vllm" ? (
-        <div className="card">
-          <strong>Qwen3-ASR sidecar</strong>
-          <div className="muted">
-            模型:{asr.qwen3.model} · Python:{asr.qwen3.python}
-            <br />
-            首次开始听写时加载模型(约 1 分钟);权重已由部署脚本预下载,无需联网。
-          </div>
-        </div>
-      ) : null}
+          {asr.backend === "volcano_api" ? (
+            <section className="panel">
+              <div className="panel-label">火山引擎密钥</div>
+              <p className="muted" style={{ marginTop: 0 }}>
+                仅保存于本机 ~/.voxflow/config.toml,不会上传。
+              </p>
+              <div className="row" style={{ marginBottom: 8 }}>
+                <input
+                  className="vf grow"
+                  placeholder="APP ID(X-Api-App-Key)"
+                  value={asr.volcano.app_key}
+                  onChange={(event) =>
+                    setAsr({
+                      ...asr,
+                      volcano: { ...asr.volcano, app_key: event.target.value },
+                    })
+                  }
+                />
+                <input
+                  className="vf grow"
+                  type="password"
+                  placeholder="Access Token"
+                  value={asr.volcano.access_key}
+                  onChange={(event) =>
+                    setAsr({
+                      ...asr,
+                      volcano: {
+                        ...asr.volcano,
+                        access_key: event.target.value,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <div className="row" style={{ marginBottom: 10 }}>
+                <input
+                  className="vf grow"
+                  placeholder="Resource ID"
+                  value={asr.volcano.resource_id}
+                  onChange={(event) =>
+                    setAsr({
+                      ...asr,
+                      volcano: {
+                        ...asr.volcano,
+                        resource_id: event.target.value,
+                      },
+                    })
+                  }
+                />
+                <input
+                  className="vf grow"
+                  placeholder="模型名(bigmodel)"
+                  value={asr.volcano.model_name}
+                  onChange={(event) =>
+                    setAsr({
+                      ...asr,
+                      volcano: {
+                        ...asr.volcano,
+                        model_name: event.target.value,
+                      },
+                    })
+                  }
+                />
+              </div>
+              <button
+                className="vf"
+                disabled={saving}
+                onClick={() => void save({ asr: { volcano: asr.volcano } })}
+              >
+                保存密钥
+              </button>
+            </section>
+          ) : null}
 
-      {savedTick > 0 ? (
-        <p className="muted">✓ 已保存(第 {savedTick} 次)</p>
-      ) : null}
+          {asr.backend === "qwen3_vllm" ? (
+            <section className="panel">
+              <div className="panel-label">Qwen3 引擎</div>
+              <div className="muted">
+                模型 <span className="mono">{asr.qwen3.model}</span> ·
+                守护进程启动时预载并预热,权重缓存于本机,无需联网。
+              </div>
+            </section>
+          ) : null}
+        </>
+      )}
+      {savedTick > 0 ? <p className="muted">✓ 已保存</p> : null}
     </div>
   );
 }

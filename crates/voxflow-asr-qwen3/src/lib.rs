@@ -334,6 +334,63 @@ impl StreamingRecognizer for Qwen3SidecarRecognizer {
     }
 }
 
+/// vLLM engine / sidecar processes whose parent died (PPID 1). They keep
+/// multi-GB GPU allocations alive, so hosts sweep them at startup.
+pub fn find_orphaned_engines() -> Vec<i32> {
+    let mut orphans = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return orphans;
+    };
+    for entry in entries.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        let Some((head, rest)) = stat.rsplit_once(')') else {
+            continue;
+        };
+        let comm = head.split_once('(').map(|(_, comm)| comm).unwrap_or("");
+        let ppid: i32 = rest
+            .split_whitespace()
+            .nth(1)
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(-1);
+        if ppid != 1 {
+            continue;
+        }
+        let cmdline = std::fs::read_to_string(format!("/proc/{pid}/cmdline"))
+            .unwrap_or_default()
+            .replace('\0', " ");
+        if comm.starts_with("VLLM::EngineCor")
+            || cmdline.contains("VLLM::EngineCore")
+            || cmdline.contains("qwen3_asr_sidecar.py")
+        {
+            orphans.push(pid);
+        }
+    }
+    orphans
+}
+
+/// Terminates orphaned engine processes (TERM, then KILL for stragglers).
+/// Returns how many were targeted.
+pub fn sweep_orphaned_engines() -> usize {
+    let orphans = find_orphaned_engines();
+    for pid in &orphans {
+        let _ = Command::new("kill").arg(pid.to_string()).status();
+    }
+    if !orphans.is_empty() {
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        for pid in find_orphaned_engines() {
+            let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+        }
+    }
+    orphans.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

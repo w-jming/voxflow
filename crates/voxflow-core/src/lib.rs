@@ -10,6 +10,8 @@ pub mod model;
 pub mod paths;
 pub mod pipeline;
 pub mod recognizer;
+#[cfg(feature = "live-asr")]
+pub mod runtime;
 pub mod server;
 
 pub use crate::config::Config;

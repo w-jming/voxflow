@@ -49,15 +49,29 @@ export type ConnectionState =
   | "disconnected"
   | "retrying";
 
+export interface RawStatus {
+  core?: { version?: string; uptime_ms?: number };
+  dictation?: { state?: string; session_id?: string | null };
+  frontend?: { kind?: string | null; state?: string; capabilities?: string[] };
+  models?: {
+    asr_backend?: string;
+    engine_state?: string;
+    active_asr?: string;
+  };
+  paths?: Record<string, string>;
+}
+
 interface ControlState {
   connection: ConnectionState;
   connectionError: string | null;
   snapshot: Record<string, unknown> | null;
+  status: RawStatus | null;
   models: ModelItem[];
   progress: Record<string, DownloadProgress>;
   lastError: string | null;
   setConnection: (state: ConnectionState, error: string | null) => void;
   setSnapshot: (snapshot: Record<string, unknown>) => void;
+  refreshStatus: () => Promise<void>;
   applyCoreEvent: (name: string, payload: Record<string, unknown>) => void;
   refreshModels: () => Promise<void>;
   download: (modelId: string) => Promise<void>;
@@ -90,6 +104,7 @@ export const useControlStore = create<ControlState>((set, get) => ({
   connection: "connecting",
   connectionError: null,
   snapshot: null,
+  status: null,
   models: [],
   progress: {},
   lastError: null,
@@ -99,7 +114,17 @@ export const useControlStore = create<ControlState>((set, get) => ({
 
   setSnapshot: (snapshot) => set({ snapshot }),
 
+  refreshStatus: async () => {
+    const reply = await coreCommand("core.status");
+    if (reply.kind === "response" && reply.payload) {
+      set({ status: reply.payload as unknown as RawStatus });
+    }
+  },
+
   applyCoreEvent: (name, payload) => {
+    if (name === "dictation.state_changed" || name === "core.notice") {
+      void get().refreshStatus();
+    }
     if (name === "model.progress") {
       const progress = payload as unknown as DownloadProgress;
       set({

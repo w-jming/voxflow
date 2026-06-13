@@ -97,6 +97,86 @@ impl CoreIpcClient {
     }
 }
 
+impl CoreIpcClient {
+    /// Reads the next envelope from the stream; `None` on idle timeout so the
+    /// caller can poll a stop condition.
+    pub fn read_envelope(&mut self) -> Result<Option<Envelope>> {
+        let mut line = String::new();
+        match self.reader.read_line(&mut line) {
+            Ok(0) => bail!("core socket closed"),
+            Ok(_) => {
+                if line.trim().is_empty() {
+                    return Ok(None);
+                }
+                Ok(Some(serde_json::from_str(&line).with_context(|| {
+                    format!("parse Core JSONL event: {line}")
+                })?))
+            }
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                Ok(None)
+            }
+            Err(error) => Err(error).context("read Core JSONL event"),
+        }
+    }
+}
+
+/// Dedicated subscription connection translating Core dictation events into
+/// IBus operations for the engine's event pump thread.
+pub struct CoreEventPump {
+    client: CoreIpcClient,
+    projector: DictationProjector,
+    adapter: IbusEngineAdapter,
+}
+
+impl CoreEventPump {
+    pub fn connect(socket: PathBuf) -> Result<Self> {
+        let mut client = CoreIpcClient::connect(socket)?;
+        client.send_command(Envelope::command(
+            "ibus-pump-hello",
+            "core.hello",
+            json!({ "client": "voxflow-ibus-pump", "proto_versions": [1] }),
+        ))?;
+        client.send_command(Envelope::command(
+            "ibus-pump-subscribe",
+            "core.subscribe",
+            json!({ "groups": ["dictation", "correction"] }),
+        ))?;
+        Ok(Self {
+            client,
+            projector: DictationProjector::default(),
+            adapter: IbusEngineAdapter::new(FrontendCapabilities::full()),
+        })
+    }
+
+    /// Next batch of operations (empty on idle tick).
+    pub fn next_operations(&mut self) -> Result<Vec<IbusOperation>> {
+        let Some(envelope) = self.client.read_envelope()? else {
+            return Ok(Vec::new());
+        };
+        if envelope.kind != MessageKind::Event
+            || !matches!(
+                envelope.name.as_str(),
+                "dictation.state_changed"
+                    | "dictation.partial"
+                    | "dictation.stable"
+                    | "dictation.final"
+                    | "correction.applied"
+            )
+        {
+            return Ok(Vec::new());
+        }
+        let mut operations = Vec::new();
+        for input_event in self
+            .projector
+            .project(&envelope)
+            .context("project Core input event")?
+        {
+            operations.extend(self.adapter.translate(input_event));
+        }
+        Ok(operations)
+    }
+}
+
 pub fn default_core_socket() -> Result<PathBuf> {
     if let Some(socket) = env::var_os("VOXFLOW_CORE_SOCKET") {
         return Ok(PathBuf::from(socket));

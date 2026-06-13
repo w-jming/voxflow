@@ -7,6 +7,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+tracing.workspace = true
 anyhow.workspace = true
 async-lock.workspace = true
 serde.workspace = true
